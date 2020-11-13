@@ -1,0 +1,4 @@
+#cat ../../Computational-Analysis-For-Social-Science/WordEmbedding/sample_generation/sample_output2/random_5_sociology_cultural_glove.csv | 
+#xargs -I % echo cp % /vol_b/data/Computational-Analysis-For-Social-Science/WordEmbedding/sample_generation/sample_output2/random_5_sociology_cultural_glove/
+#../../Computational-Analysis-For-Social-Science/WordEmbedding/sample_generation/sample_output2/random_5_sociology_cultural_glove/
+xargs -a ../../Computational-Analysis-For-Social-Science/WordEmbedding/sample_generation/sample_output2/random_5_sociology_cultural_glove.csv cp -t /vol_b/data/Computational-Analysis-For-Social-Science/WordEmbedding/sample_generation/sample_output2/random_5_sociology_cultural_glove/
