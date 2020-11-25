@@ -17,16 +17,16 @@ from sklearn.feature_extraction import text
 from nltk.stem.porter import PorterStemmer; ps = PorterStemmer() # approximate but effective (and common) method of stemming words
 import os # for working with file trees
 import numpy as np
-import spacy 
+#import spacy 
 
 # Prep dictionaries of English words
 from nltk.corpus import words # Dictionary of 236K English words from NLTK
 english_nltk = set(words.words()) # Make callable
-english_long = set() # Dictionary of 467K English words from https://github.com/dwyl/english-words
-fname =  "/vol_b/data/data_management/tools/english_words.txt" # Set file path to long english dictionary
-with open(fname, "r") as f:
-    for word in f:
-        english_long.add(word.strip())
+#english_long = set() # Dictionary of 467K English words from https://github.com/dwyl/english-words
+#fname =  "/vol_b/data/data_management/tools/english_words.txt" # Set file path to long english dictionary
+#with open(fname, "r") as f:
+#    for word in f:
+#        english_long.add(word.strip())
 
 #to look for proper nouns when cleaning text
 from nltk.tag import pos_tag
@@ -164,7 +164,7 @@ punctstr = punctstr_make()
 unicode_list = unicode_make()
 
 # Instantiate spacy object for part of speech tagging (to remove proper nouns)
-nlp = spacy.load('en', disable=['ner']) # For speed, keep only POS tagging functionality and parsing (which improves accuracy). Does including NER also improve accuracy? 
+#nlp = spacy.load('en', disable=['ner']) # For speed, keep only POS tagging functionality and parsing (which improves accuracy). Does including NER also improve accuracy? 
 
 def gather_propernouns(sentence):
     """ Creates a list of the propernouns in the sentence.
@@ -208,7 +208,7 @@ def clean_sentence(sentence, remove_stopwords = True, stopwords_jstor = False, r
     Returns: 
         Cleaned & tokenized sentence, i.e. a list of cleaned, lower-case, one-word strings"""
     
-    global stop_words_list, punctstr, unicode_list, english_nltk, nlp, english_long
+    global stop_words_list, punctstr, unicode_list, english_nltk, nlp #, english_long
 
     # Define stopwords used by JSTOR and implement if called:
     jstor_list_words = set(["a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "if", "in", "into", "is", "it", "no", "not", "of", "on", "or", "such", "that", "the", "their", "then", "there", "these", "they", "this", "to", "was", "will", "with"]) #jstor removal words
