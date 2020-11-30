@@ -9,7 +9,7 @@
 @project: Computational Literature Review of Organizational Scholarship
 @repo: https://github.com/h2researchgroup/classification/
 @date: November 2020
-@description: Preprocesses article data for classifier training purposes. 
+@description: Preprocesses article data for classifier training purposes. Also creates vectorizers for each one. Saves the labeled, preprocessed data and vectorizers to disk. 
 '''
 
 
@@ -28,8 +28,9 @@ import sys # For terminal tricks
 import _pickle as cPickle # Optimized version of pickle
 import gc # For managing garbage collector
 import timeit # For counting time taken for a process
-import datetime # For working with dates & times
+from datetime import date # For working with dates & times
 from nltk import sent_tokenize
+from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 import tables
 import random
 import os; from os import listdir; from os.path import isfile, join
@@ -45,19 +46,30 @@ from quickpickle import quickpickle_dump, quickpickle_load # for quick saving & 
 
 cwd = os.getcwd()
 root = str.replace(cwd, 'classification/preprocess', '')
+thisday = date.today().strftime("%m%d%y")
 
 # directory for prepared data: save files here
 data_fp = root + 'classification/data/'
 
-# Training data
-training_cult_raw_fp = data_fp + 'training_cultural_raw_112420.pkl'
-training_relt_raw_fp = data_fp + 'training_relational_raw_112420.pkl'
-training_demog_raw_fp = data_fp + 'training_demographic_raw_112420.pkl'
+# Labeled data
+training_cult_raw_fp = data_fp + f'training_cultural_raw_{str(thisday)}.pkl'
+training_relt_raw_fp = data_fp + f'training_relational_raw_{str(thisday)}.pkl'
+training_demog_raw_fp = data_fp + f'training_demographic_raw_{str(thisday)}.pkl'
+
+# Vectorizers trained on hand-coded data (use to limit vocab of input texts)
+cult_vec_fp = data_fp + f'vectorizer_cult_{str(thisday)}.joblib'
+relt_vec_fp = data_fp + f'vectorizer_relt_{str(thisday)}.joblib'
+demog_vec_fp = data_fp + f'vectorizer_demog_{str(thisday)}.joblib'
+
+# Vocab of vectorizers (for verification purposes)
+cult_vec_feat_fp = data_fp + f'vectorizer_features_cult_{str(thisday)}.csv'
+relt_vec_feat_fp = data_fp + f'vectorizer_features_relt_{str(thisday)}.csv'
+demog_vec_feat_fp = data_fp + f'vectorizer_features_demog_{str(thisday)}.csv'
 
 # Output
-training_cult_prepped_fp = data_fp + 'training_cultural_preprocessed_112420.pkl'
-training_relt_prepped_fp = data_fp + 'training_relational_preprocessed_112420.pkl'
-training_demog_prepped_fp = data_fp + 'training_demographic_preprocessed_112420.pkl'
+training_cult_prepped_fp = data_fp + f'training_cultural_preprocessed_{str(thisday)}.pkl'
+training_relt_prepped_fp = data_fp + f'training_relational_preprocessed_{str(thisday)}.pkl'
+training_demog_prepped_fp = data_fp + f'training_demographic_preprocessed_{str(thisday)}.pkl'
 
 
 ###############################################
@@ -99,6 +111,65 @@ tqdm.pandas(desc='Cleaning text files...')
 coded_cult['text'] = coded_cult['text'].progress_apply(lambda text: preprocess_text(text))
 coded_relt['text'] = coded_relt['text'].progress_apply(lambda text: preprocess_text(text))
 coded_demog['text'] = coded_demog['text'].progress_apply(lambda text: preprocess_text(text))
+
+
+def collect_article_tokens(article):
+    '''
+    Collects words from tokenized sentences representing each article.
+    
+    Args:
+        article: list of lists of words (each list is a sentence)
+    Returns:
+        list: single list of tokens
+    '''
+    
+    tokens = []
+    
+    for sent in article:
+        tokens += [word for word in sent]
+        
+    return tokens
+
+# Add each word from each article to empty list:
+cult_tokens = []; coded_cult['text'].apply(lambda article: cult_tokens.extend([word for word in collect_article_tokens(article)]))
+relt_tokens = []; coded_relt['text'].apply(lambda article: relt_tokens.extend([word for word in collect_article_tokens(article)]))
+demog_tokens = []; coded_demog['text'].apply(lambda article: demog_tokens.extend([word for word in collect_article_tokens(article)]))
+
+
+###############################################
+# Vectorize texts and save vectorizers to disk
+###############################################
+
+# Define stopwords used by JSTOR
+jstor_stopwords = set(["a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "if", "in", "into", "is", "it", "no", "not", "of", "on", "or", "such", "that", "the", "their", "then", "there", "these", "they", "this", "to", "was", "will", "with"])
+
+# Use TFIDF weighted DTM because results in better classifier accuracy than unweighted
+#vectorizer = CountVectorizer(max_features=100000, min_df=1, max_df=0.8, stop_words=jstor_stopwords) # DTM
+vectorizer = TfidfVectorizer(max_features=100000, min_df=1, max_df=0.8, stop_words=jstor_stopwords) # TFIDF
+
+X_cult = vectorizer.fit_transform(cult_tokens)
+joblib.dump(vectorizer, open(cult_vec_fp, "wb"))
+with open(cult_vec_feat_fp,'w') as f:
+    writer = csv.writer(f)
+    writer.writerows([vectorizer.get_feature_names()])
+    
+print('Number of features in cultural vectorizer:', len(vectorizer.get_feature_names()))
+
+X_relt = vectorizer.fit_transform(relt_tokens)
+joblib.dump(vectorizer, open(relt_vec_fp, "wb"))
+with open(relt_vec_feat_fp,'w') as f:
+    writer = csv.writer(f)
+    writer.writerows([vectorizer.get_feature_names()])
+    
+print('Number of features in relational vectorizer:', len(vectorizer.get_feature_names()))
+
+X_demog = vectorizer.fit_transform(demog_tokens)
+joblib.dump(vectorizer, open(demog_vec_fp, "wb"))
+with open(demog_vec_feat_fp,'w') as f:
+    writer = csv.writer(f)
+    writer.writerows([vectorizer.get_feature_names()])
+
+print('Number of features in demographic vectorizer:', len(vectorizer.get_feature_names()))
 
 
 ###############################################

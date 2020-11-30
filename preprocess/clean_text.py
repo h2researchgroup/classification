@@ -303,7 +303,6 @@ def clean_sentence(sentence, remove_stopwords = True, stopwords_jstor = False, r
 
 def clean_sentence_apache(sentence, remove_numbers = True, remove_acronyms = True, remove_propernouns = True, unhyphenate = False, return_string = False):
     
-    #sentence = ' '.join( [word.lower() for word in sentence.split() if len(word)>1] ) #removing ANY single letter words
     # Replace unicode spaces, tabs, and underscores with spaces, and remove whitespaces from start/end of sentence:
     sentence = sentence.replace(u"\xa0", u" ").replace(u"\\t", u" ").replace(u"_", u" ").strip(" ")
 
@@ -313,16 +312,16 @@ def clean_sentence_apache(sentence, remove_numbers = True, remove_acronyms = Tru
             ls_new = [re.sub(r"- ", "", word) for word in ls]
             for i in range(len(ls)):
                 sentence= sentence.replace(ls[i], ls_new[i])
-    sentence = re.sub(r"\b[a-zA-Z]\b", "", sentence) #removing any single letter alphabets
+                
+    if remove_numbers:
+        #sentence = re.sub(r"\b[0-9]+\b\s*", "", sentence) # remove words made up of numbers
+        #sentence = re.sub(r"\b.*[0-9]+\S*\b\s*", "", sentence) # remove words containing numbers
+        sentence = re.sub(r"\d+", "", sentence) # remove numbers from anywhere
+        
+    sentence = re.sub(r"\b[a-zA-Z]\b", "", sentence) #remove any single letter words
+    
     if remove_acronyms:
         sentence = re.sub(r"\b[A-Z][A-Z]+\b\s+", "", sentence)
-    if remove_numbers:
-        sentence = re.sub(r"\b[0-9]+\b\s*", "", sentence)
-#         ls = re.findall(r"\b[0-9]+\b\s*", sentence)
-#         if len(ls) > 0:
-#             ls_new = np.repeat("", len(ls))
-#             for i in range(len(ls)):
-#                 sentence = sentence.replace(ls[i], ls_new[i])
 
     sent_list = []
     
@@ -334,9 +333,30 @@ def clean_sentence_apache(sentence, remove_numbers = True, remove_acronyms = Tru
     while tokenizer.incrementToken():
         sent_list.append(charTermAttrib.toString().lower()) #lowercasing
         
-    jstor_list_words = set(["a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "if", "in", "into", "is", "it", "no", "not", "of", "on", "or", "such", "that", "the", "their", "then", "there", "these", "they", "this", "to", "was", "will", "with"]) #jstor removal words
-    sent_list = [word for word in sent_list if word not in jstor_list_words] #removing stopwords as well as lowercasing all words
+    # Remove same stopwords as JSTOR
+    jstor_stop_words = set(["a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "if", "in", "into", "is", "it", "no", "not", "of", "on", "or", "such", "that", "the", "their", "then", "there", "these", "they", "this", "to", "was", "will", "with"]) #define jstor removal words
+    sent_list = [word for word in sent_list if word not in jstor_stop_words]
         
+    # Remove common sentences made of formatting (junk) words
+    blacklist_sents = ['valign bottom oasis entry oasis entry colname colsep rowsep align char char', 
+                       'oasis entry oasis entry colname colsep rowsep align char char', 
+                       'oasis entry colname colsep rowsep align char char', 
+                  'valign bottom oasis entry colname colsep rowsep align char char', 
+                       'colsep rowsep oasis entry align char char', 
+                       'oasis entry oasis entry colsep rowsep align char char', 
+                       'colsep rowsep oasis entry oasis entry align char char']
+    if sentlist in blacklist_sents:
+        return('')
+    
+    # Remove junk formatting words
+    sent_list = [word for word in sent_list if 
+                 ("valign" not in word) and 
+                 ("oasis" != word) and 
+                 ("colwidth" != word) and 
+                 ("char" != word) and 
+                 ("rowsep" != word) and 
+                 ("colsep" != word) and 
+                 ("pp" != word)]
         
     # If True, include the proper nouns in stop_words_list
     if remove_propernouns:              
