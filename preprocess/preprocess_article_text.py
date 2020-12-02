@@ -50,6 +50,7 @@ thisday = date.today().strftime("%m%d%y")
 
 # directory for prepared data: save files here
 data_fp = root + 'classification/data/'
+model_fp = root + 'classification/models/'
 
 # Labeled data
 training_cult_raw_fp = data_fp + f'training_cultural_raw_{str(thisday)}.pkl'
@@ -57,14 +58,14 @@ training_relt_raw_fp = data_fp + f'training_relational_raw_{str(thisday)}.pkl'
 training_demog_raw_fp = data_fp + f'training_demographic_raw_{str(thisday)}.pkl'
 
 # Vectorizers trained on hand-coded data (use to limit vocab of input texts)
-cult_vec_fp = data_fp + f'vectorizer_cult_{str(thisday)}.joblib'
-relt_vec_fp = data_fp + f'vectorizer_relt_{str(thisday)}.joblib'
-demog_vec_fp = data_fp + f'vectorizer_demog_{str(thisday)}.joblib'
+cult_vec_fp = model_fp + f'vectorizer_cult_{str(thisday)}.joblib'
+relt_vec_fp = model_fp + f'vectorizer_relt_{str(thisday)}.joblib'
+demog_vec_fp = model_fp + f'vectorizer_demog_{str(thisday)}.joblib'
 
 # Vocab of vectorizers (for verification purposes)
-cult_vec_feat_fp = data_fp + f'vectorizer_features_cult_{str(thisday)}.csv'
-relt_vec_feat_fp = data_fp + f'vectorizer_features_relt_{str(thisday)}.csv'
-demog_vec_feat_fp = data_fp + f'vectorizer_features_demog_{str(thisday)}.csv'
+cult_vec_feat_fp = model_fp + f'vectorizer_features_cult_{str(thisday)}.csv'
+relt_vec_feat_fp = model_fp + f'vectorizer_features_relt_{str(thisday)}.csv'
+demog_vec_feat_fp = model_fp + f'vectorizer_features_demog_{str(thisday)}.csv'
 
 # Output
 training_cult_prepped_fp = data_fp + f'training_cultural_preprocessed_{str(thisday)}.pkl'
@@ -180,3 +181,5 @@ print('Number of features in demographic vectorizer:', len(vectorizer.get_featur
 quickpickle_dump(coded_cult, training_cult_prepped_fp)
 quickpickle_dump(coded_relt, training_relt_prepped_fp)
 quickpickle_dump(coded_demog, training_demog_prepped_fp)
+
+sys.exit() # Close script to be safe
