@@ -87,13 +87,22 @@ coded_demog = quickpickle_load(training_demog_raw_fp)
 ###############################################
 
 def preprocess_text(article):
-    '''Cleans up articles by ...
+    '''
+    Cleans up articles by removing page marker junk, 
+    unicode formatting, and extra whitespaces; 
+    re-joining words split by (hyphenated at) end of line; 
+    removing numbers (by default) and acronyms (not by default); 
+    tokenizing sentences into words using the Apache Lucene Tokenizer (same as JSTOR); 
+    lower-casing words; 
+    removing stopwords (same as JSTOR), junk formatting words, junk sentence fragments, 
+    and proper nouns (the last not by default).
     
     Args:
         article: in str format, often long
         
     Returns:
-        str: cleaned string'''
+        list of lists of str: each element of list is a sentence, each sentence is a list of words
+    '''
     
     # Remove page marker junk
     article = article.replace('<plain_text><page sequence="1">', '')
@@ -101,7 +110,14 @@ def preprocess_text(article):
     
     doc = [] # list to hold tokenized sentences making up article
     for sent in sent_tokenize(article):
-        sent = clean_sentence_apache(sent, unhyphenate=True, remove_propernouns=False, remove_acronyms=False)
+        sent = clean_sentence_apache(sent, 
+                                     unhyphenate=True, 
+                                     remove_numbers=True, 
+                                     remove_acronyms=False, 
+                                     remove_stopwords=False, 
+                                     remove_propernouns=False, 
+                                     return_string=False
+                                    )
         sent = [word for word in sent if word != '']
         if len(sent) > 0:
             doc.append(sent)
