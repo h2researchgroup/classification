@@ -301,10 +301,32 @@ def clean_sentence(sentence, remove_stopwords = True, stopwords_jstor = False, r
 
 
 
-def clean_sentence_apache(sentence, remove_numbers = True, remove_acronyms = True, remove_propernouns = True, unhyphenate = False, return_string = False):
+def clean_sentence_apache(sentence, 
+                          unhyphenate = True, 
+                          remove_numbers = True, 
+                          remove_acronyms = False, 
+                          remove_stopwords = True, 
+                          remove_propernouns = False, 
+                          return_string = False):
+    
+    '''
+    Cleans up articles by removing unicode formatting and extra whitespaces; 
+    re-joining words split by (hyphenated at) end of line; 
+    removing numbers (by default) and acronyms (not by default); 
+    tokenizing sentences into words using the Apache Lucene Tokenizer (same as JSTOR); 
+    lower-casing words; 
+    removing stopwords (same as JSTOR), junk formatting words, junk sentence fragments, 
+    and proper nouns (the last not by default).
+    
+    Args:
+        sentence: in str format
+        
+    Returns:
+        list of str: each element of list is a word
+    '''
     
     # Replace unicode spaces, tabs, and underscores with spaces, and remove whitespaces from start/end of sentence:
-    sentence = sentence.replace(u"\xa0", u" ").replace(u"\\t", u" ").replace(u"_", u" ").strip(" ")
+    sentence = sentence.encode('ascii').decode('ascii').replace(u"\xa0", u" ").replace(u"\\t", u" ").replace(u"_", u" ").strip(" ")
 
     if unhyphenate:              
         ls = re.findall(r"\w+-\s\w+", sentence)
@@ -333,9 +355,18 @@ def clean_sentence_apache(sentence, remove_numbers = True, remove_acronyms = Tru
     while tokenizer.incrementToken():
         sent_list.append(charTermAttrib.toString().lower()) #lowercasing
         
-    # Remove same stopwords as JSTOR
+    # Remove same stopwords as JSTOR, also junk formatting words
     jstor_stop_words = set(["a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "if", "in", "into", "is", "it", "no", "not", "of", "on", "or", "such", "that", "the", "their", "then", "there", "these", "they", "this", "to", "was", "will", "with"]) #define jstor removal words
-    sent_list = [word for word in sent_list if word not in jstor_stop_words]
+    if remove_stopwords:
+        sent_list = [word for word in sent_list if 
+                     word not in jstor_stop_words 
+                     ("valign" not in word) and 
+                     ("oasis" != word) and 
+                     ("colwidth" != word) and 
+                     ("char" != word) and 
+                     ("rowsep" != word) and 
+                     ("colsep" != word) and 
+                     ("pp" != word)]
         
     # Remove common sentences made of formatting (junk) words
     blacklist_sents = ['valign bottom oasis entry oasis entry colname colsep rowsep align char char', 
@@ -347,16 +378,6 @@ def clean_sentence_apache(sentence, remove_numbers = True, remove_acronyms = Tru
                        'colsep rowsep oasis entry oasis entry align char char']
     if sentlist in blacklist_sents:
         return('')
-    
-    # Remove junk formatting words
-    sent_list = [word for word in sent_list if 
-                 ("valign" not in word) and 
-                 ("oasis" != word) and 
-                 ("colwidth" != word) and 
-                 ("char" != word) and 
-                 ("rowsep" != word) and 
-                 ("colsep" != word) and 
-                 ("pp" != word)]
         
     # If True, include the proper nouns in stop_words_list
     if remove_propernouns:              
