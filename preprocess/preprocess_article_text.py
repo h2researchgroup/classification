@@ -8,8 +8,8 @@
 @contact: Jaren.Haber@georgetown.edu
 @project: Computational Literature Review of Organizational Scholarship
 @repo: https://github.com/h2researchgroup/classification/
-@date: November 2020
-@description: Preprocesses article data for classifier training purposes. Also creates vectorizers for each one. Saves the labeled, preprocessed data and vectorizers to disk. 
+@date: December 7, 2020
+@description: General script for preprocessing JSTOR article data. As of now does three things: Preprocesses article data for classifier training purposes; preprocesses ALL filtered article data for future sample selection; and creates vectorizers for training each classifier. Saves the preprocessed data (labeled and full) and vectorizers to disk. 
 '''
 
 
@@ -38,6 +38,7 @@ import os; from os import listdir; from os.path import isfile, join
 # Custom scripts for working with texts in Python
 from clean_text import stopwords_make, punctstr_make, unicode_make, get_common_words, clean_sentence_apache # for preprocessing text
 from quickpickle import quickpickle_dump, quickpickle_load # for quick saving & loading to pickle format
+from text_to_file import write_textlist, read_text # custom scripts for reading and writing text lists to .txt files
 
 
 ###############################################
@@ -51,6 +52,10 @@ thisday = date.today().strftime("%m%d%y")
 # directory for prepared data: save files here
 data_fp = root + 'classification/data/'
 model_fp = root + 'classification/models/'
+
+# Current article lists
+article_list_fp = data_fp + 'filtered_length_index.csv' # Filtered index of research articles
+article_paths_fp = data_fp + 'filtered_length_article_paths.csv' # List of article file paths
 
 # Labeled data
 training_cult_raw_fp = data_fp + f'training_cultural_raw_{str(thisday)}.pkl'
@@ -77,9 +82,21 @@ training_demog_prepped_fp = data_fp + f'training_demographic_preprocessed_{str(t
 # Load data
 ###############################################
 
-coded_cult = quickpickle_load(training_cult_raw_fp)
-coded_relt = quickpickle_load(training_relt_raw_fp)
-coded_demog = quickpickle_load(training_demog_raw_fp)
+#coded_cult = quickpickle_load(training_cult_raw_fp)
+#coded_relt = quickpickle_load(training_relt_raw_fp)
+#coded_demog = quickpickle_load(training_demog_raw_fp)
+
+# Read full list of articles for new sample selection
+tqdm.pandas(desc='Correcting file paths...')
+articles = (pd.read_csv(article_paths_fp, low_memory=False, header=None, names=['file_name']))
+articles['file_name'] = articles['file_name'].progress_apply(lambda fp: re.sub('/home/jovyan/work/', root, fp))
+
+# Read text data from files
+tqdm.pandas(desc='Loading ALL text files...')
+articles['text'] = articles['file_name'].progress_apply(lambda fp: read_text(fp, shell = True))
+
+# Use articles data to define file name for ALL JSTOR preprocessed text
+all_prepped_fp = data_fp + f'filtered_preprocessed_texts_{str(len(articles))}_{str(thisday)}.pkl'
 
 
 ###############################################
@@ -124,10 +141,13 @@ def preprocess_text(article):
     
     return doc
 
-tqdm.pandas(desc='Cleaning text files...')
-coded_cult['text'] = coded_cult['text'].progress_apply(lambda text: preprocess_text(text))
-coded_relt['text'] = coded_relt['text'].progress_apply(lambda text: preprocess_text(text))
-coded_demog['text'] = coded_demog['text'].progress_apply(lambda text: preprocess_text(text))
+#tqdm.pandas(desc='Cleaning labeled text files...')
+#coded_cult['text'] = coded_cult['text'].progress_apply(lambda text: preprocess_text(text))
+#coded_relt['text'] = coded_relt['text'].progress_apply(lambda text: preprocess_text(text))
+#coded_demog['text'] = coded_demog['text'].progress_apply(lambda text: preprocess_text(text))
+
+tqdm.pandas(desc='Cleaning ALL text files...')
+articles['text'] = articles['text'].progress_apply(lambda text: preprocess_text(text))
 
 
 def collect_article_tokens(article):
@@ -146,7 +166,7 @@ def collect_article_tokens(article):
         tokens += [word for word in sent]
         
     return tokens
-
+'''
 # Add each word from each article to empty list:
 cult_tokens = []; coded_cult['text'].apply(lambda article: cult_tokens.extend([word for word in collect_article_tokens(article)]))
 relt_tokens = []; coded_relt['text'].apply(lambda article: relt_tokens.extend([word for word in collect_article_tokens(article)]))
@@ -187,15 +207,18 @@ with open(demog_vec_feat_fp,'w') as f:
     writer.writerows([vectorizer.get_feature_names()])
 
 print('Number of features in demographic vectorizer:', len(vectorizer.get_feature_names()))
-
+'''
 
 ###############################################
 # Save preprocessed text files
 ###############################################
 
 # Save training data for classifiers: true positives + negatives for each perspective
-quickpickle_dump(coded_cult, training_cult_prepped_fp)
-quickpickle_dump(coded_relt, training_relt_prepped_fp)
-quickpickle_dump(coded_demog, training_demog_prepped_fp)
+#quickpickle_dump(coded_cult, training_cult_prepped_fp)
+#quickpickle_dump(coded_relt, training_relt_prepped_fp)
+#quickpickle_dump(coded_demog, training_demog_prepped_fp)
+
+# Save full, preprocessed text data
+quickpickle_dump(articles, all_prepped_fp)
 
 sys.exit() # Close script to be safe
