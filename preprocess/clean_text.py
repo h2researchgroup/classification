@@ -326,7 +326,7 @@ def clean_sentence_apache(sentence,
     '''
     
     # Replace unicode spaces, tabs, and underscores with spaces, and remove whitespaces from start/end of sentence:
-    sentence = sentence.encode('ascii').decode('ascii').replace(u"\xa0", u" ").replace(u"\\t", u" ").replace(u"_", u" ").strip(" ")
+    sentence = sentence.encode('utf-8').decode('utf-8').replace(u"\xa0", u" ").replace(u"\\t", u" ").replace(u"_", u" ").strip(" ")
 
     if unhyphenate:              
         ls = re.findall(r"\w+-\s\w+", sentence)
@@ -376,7 +376,7 @@ def clean_sentence_apache(sentence,
                        'colsep rowsep oasis entry align char char', 
                        'oasis entry oasis entry colsep rowsep align char char', 
                        'colsep rowsep oasis entry oasis entry align char char']
-    if sentlist in blacklist_sents:
+    if sent_list in blacklist_sents:
         return('')
         
     # If True, include the proper nouns in stop_words_list

@@ -27,20 +27,28 @@ def write_textlist(file_path, textlist):
     return    
 
 
-def read_text(file_path, return_string = True):
+def read_text(file_path, return_string = True, shell = False):
     """Loads text into memory, either as str or as list. Must be assigned to object.
     
     Args: 
         file_path: Path to file (str)
         return_string: boolean indicating whether to return as string format (instead of list)
+        shell: boolean indicating if function is called from command line
     
     Returns: 
         str if return_string, else list
     """
     
+    if shell: 
+        
+        with open(file_path, 'r') as file_handler:
+            text = file_handler.read()
+        
+        return text
+    
     if return_string:
         
-        textstr = ''
+        textstr = '' # empty string
         
         with open(file_path) as file_handler:
             line = file_handler.readline()
@@ -50,9 +58,9 @@ def read_text(file_path, return_string = True):
 
         return textstr
         
-    else:
+    else: # return list of text
         
-        textlist = []
+        textlist = [] # empty list
     
         with open(file_path) as file_handler:
             line = file_handler.readline()
