@@ -38,7 +38,7 @@ import random
 import os; from os import listdir; from os.path import isfile, join
 
 # Custom scripts for working with texts in Python
-from clean_text import stopwords_make, punctstr_make, unicode_make, get_common_words, clean_sentence_apache # for preprocessing text
+from clean_text import stopwords_make, punctstr_make, unicode_make, apache_tokenize, clean_sentence_apache # for preprocessing text
 from quickpickle import quickpickle_dump, quickpickle_load # for quick saving & loading to pickle format
 from text_to_file import write_textlist, read_text # custom scripts for reading and writing text lists to .txt files
 
@@ -129,7 +129,7 @@ def preprocess_text(article):
     article = re.sub(r'</page>(\<.*?\>)', ' \n ', article)
     
     doc = [] # list to hold tokenized sentences making up article
-    for sent in sent_tokenize(article):
+    for sent in article.split('\n'):
         sent = clean_sentence_apache(sent, 
                                      unhyphenate=True, 
                                      remove_numbers=True, 
