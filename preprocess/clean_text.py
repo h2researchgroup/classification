@@ -210,7 +210,7 @@ def clean_sentence_apache(sentence,
         sentence = re.sub(r"\b[A-Z][A-Z]+\b\s+", "", sentence)
     
     # Tokenize using Apache
-    sent_list = apache_tokenize(sent, lowercase = lowercase)
+    sent_list = apache_tokenize(sentence, lowercase = lowercase)
         
     # Remove same stopwords as JSTOR, also junk formatting words
     if remove_stopwords:
