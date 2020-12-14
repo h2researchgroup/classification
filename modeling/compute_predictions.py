@@ -40,7 +40,7 @@ from sklearn.ensemble import RandomForestClassifier
 
 # Custom scripts for working with texts in Python
 import sys; sys.path.insert(0, "../preprocess/") # For loading functions from files in other directory
-from clean_text import stopwords_make, punctstr_make, unicode_make, get_common_words, clean_sentence_apache # for preprocessing text
+from clean_text import stopwords_make, punctstr_make, unicode_make, apache_tokenize, clean_sentence_apache # for preprocessing text
 from quickpickle import quickpickle_dump, quickpickle_load # for quick saving & loading to pickle format
 from text_to_file import write_textlist, read_text # custom scripts for reading and writing text lists to .txt files
 
@@ -61,9 +61,9 @@ model_fp = root + 'classification/models/'
 all_prepped_fp = data_fp + 'filtered_preprocessed_texts_65365_120720.pkl'
 
 # Model filepaths
-cult_model_fp = model_fp + 'classifier_cult_121120.joblib'
-relt_model_fp = model_fp + 'classifier_relt_121120.joblib'
-demog_model_fp = model_fp + 'classifier_demog_121120.joblib'
+cult_model_fp = model_fp + 'classifier_cult_121420.joblib'
+relt_model_fp = model_fp + 'classifier_relt_121420.joblib'
+demog_model_fp = model_fp + 'classifier_demog_121420.joblib'
 
 # Vectorizers trained on hand-coded data (use to limit vocab of input texts)
 cult_vec_fp = model_fp + 'vectorizer_cult_121120.joblib'
@@ -134,13 +134,13 @@ def compute_predictions(text, vectorizer_model, class_model):
     return label, prob_yes, prob_no
 
 tqdm.pandas(desc = "Predicting: cultural persp.")
-articles[['prediction_cult','prediction_cult_prob_yes','prediction_cult_prob_no']] = articles['text'].progress_apply(lambda sentlist: pd.Series(compute_predictions([' '.join(token) for token in sentlist], cult_vec, cult_model)))
+articles[['prediction_cult','prediction_cult_prob_yes','prediction_cult_prob_no']] = articles['text'].progress_apply(lambda sentlist: pd.Series(compute_predictions([' '.join(sent) for sent in sentlist], cult_vec, cult_model)))
 
 tqdm.pandas(desc = "Predicting: relational persp.")
-articles[['prediction_relt','prediction_relt_prob_yes','prediction_relt_prob_no']] = articles['text'].progress_apply(lambda sentlist: pd.Series(compute_predictions([' '.join(token) for token in sentlist], relt_vec, relt_model)))
+articles[['prediction_relt','prediction_relt_prob_yes','prediction_relt_prob_no']] = articles['text'].progress_apply(lambda sentlist: pd.Series(compute_predictions([' '.join(sent) for sent in sentlist], relt_vec, relt_model)))
 
 tqdm.pandas(desc = "Predicting: demographic persp.")
-articles[['prediction_demog','prediction_demog_prob_yes','prediction_demog_prob_no']] = articles['text'].progress_apply(lambda sentlist: pd.Series(compute_predictions([' '.join(token) for token in sentlist], demog_vec, demog_model)))
+articles[['prediction_demog','prediction_demog_prob_yes','prediction_demog_prob_no']] = articles['text'].progress_apply(lambda sentlist: pd.Series(compute_predictions([' '.join(sent) for sent in sentlist], demog_vec, demog_model)))
 
 
 ###############################################
