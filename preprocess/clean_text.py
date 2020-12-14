@@ -209,14 +209,8 @@ def clean_sentence_apache(sentence,
     if remove_acronyms:
         sentence = re.sub(r"\b[A-Z][A-Z]+\b\s+", "", sentence)
     
-    #tokenizing
+    # Tokenize using Apache
     sent_list = apache_tokenize(sent, lowercase = lowercase)
-    tokenizer = StandardTokenizer()
-    tokenizer.setReader(StringReader(sentence))
-    charTermAttrib = tokenizer.getAttribute(CharTermAttribute.class_)
-    tokenizer.reset()
-    while tokenizer.incrementToken():
-        sent_list.append(charTermAttrib.toString().lower()) #lowercasing
         
     # Remove same stopwords as JSTOR, also junk formatting words
     if remove_stopwords:
