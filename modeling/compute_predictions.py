@@ -61,14 +61,14 @@ model_fp = root + 'classification/models/'
 all_prepped_fp = data_fp + 'filtered_preprocessed_texts_65365_120720.pkl'
 
 # Model filepaths
-cult_model_fp = model_fp + 'classifier_cult_121420.joblib'
-relt_model_fp = model_fp + 'classifier_relt_121420.joblib'
-demog_model_fp = model_fp + 'classifier_demog_121420.joblib'
+cult_model_fp = model_fp + 'classifier_cult_121520.joblib'
+relt_model_fp = model_fp + 'classifier_relt_121520.joblib'
+demog_model_fp = model_fp + 'classifier_demog_121520.joblib'
 
 # Vectorizers trained on hand-coded data (use to limit vocab of input texts)
-cult_vec_fp = model_fp + 'vectorizer_cult_121120.joblib'
-relt_vec_fp = model_fp + 'vectorizer_relt_121120.joblib'
-demog_vec_fp = model_fp + 'vectorizer_demog_121120.joblib'
+cult_vec_fp = model_fp + 'vectorizer_cult_121520.joblib'
+relt_vec_fp = model_fp + 'vectorizer_relt_121520.joblib'
+demog_vec_fp = model_fp + 'vectorizer_demog_121520.joblib'
 
 
 ###############################################
@@ -97,9 +97,9 @@ demog_model = joblib.load(demog_model_fp)
 # Load vectorizers to keep vocab consistent with training data
 ######################################################
 
-cult_vec = joblib.load(cult_vec_fp)
-relt_vec = joblib.load(relt_vec_fp)
-demog_vec = joblib.load(demog_vec_fp)
+cult_vec = joblib.load(cult_vec_fp) #; print("# features in cult. vectorizer:", str(len(cult_vec.get_feature_names())))
+relt_vec = joblib.load(relt_vec_fp) #; print("# features in relt. vectorizer:", str(len(relt_vec.get_feature_names())))
+demog_vec = joblib.load(demog_vec_fp) #; print("# features in demog. vectorizer:", str(len(demog_vec.get_feature_names())))
 
 
 ###############################################
