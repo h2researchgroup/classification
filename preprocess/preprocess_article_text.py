@@ -60,9 +60,9 @@ article_list_fp = data_fp + 'filtered_length_index.csv' # Filtered index of rese
 article_paths_fp = data_fp + 'filtered_length_article_paths.csv' # List of article file paths
 
 # Labeled data
-training_cult_raw_fp = data_fp + 'training_cultural_raw_112420.pkl'
-training_relt_raw_fp = data_fp + 'training_relational_raw_112420.pkl'
-training_demog_raw_fp = data_fp + 'training_demographic_raw_112420.pkl'
+training_cult_raw_fp = data_fp + 'training_cultural_raw_121620.pkl'
+training_relt_raw_fp = data_fp + 'training_relational_raw_121620.pkl'
+training_demog_raw_fp = data_fp + 'training_demographic_raw_121620.pkl'
 
 # Vectorizers trained on hand-coded data (use to limit vocab of input texts)
 cult_vec_fp = model_fp + f'vectorizer_cult_{str(thisday)}.joblib'
@@ -134,7 +134,7 @@ def preprocess_text(article):
                                      unhyphenate=True, 
                                      remove_numbers=True, 
                                      remove_acronyms=False, 
-                                     remove_stopwords=False, 
+                                     remove_stopwords=True, 
                                      remove_propernouns=False, 
                                      return_string=False
                                     )

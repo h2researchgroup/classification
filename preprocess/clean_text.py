@@ -214,15 +214,13 @@ def clean_sentence_apache(sentence,
         
     # Remove same stopwords as JSTOR, also junk formatting words
     if remove_stopwords:
+        junk_words = ["colwidth", "colname", "char", "rowsep", "colsep", 
+                      "oasis", "pp", "fn", "sec", "pi", "sc", "id"] # define junk/formatting terms to avoid
+        stop_words = jstor_stop_words + junk_words # simplest way to avoid stopwords and formatting words: combine them!
+        
         sent_list = [word for word in sent_list if 
-                     word not in jstor_stop_words 
-                     ("valign" not in word) and 
-                     ("oasis" != word) and 
-                     ("colwidth" != word) and 
-                     ("char" != word) and 
-                     ("rowsep" != word) and 
-                     ("colsep" != word) and 
-                     ("pp" != word)]
+                     word not in stop_words and 
+                     ("valign" not in word)] # one more meddlesome formatting word: "valign"
         
     # Remove common sentences made of formatting (junk) words
     blacklist_sents = ['valign bottom oasis entry oasis entry colname colsep rowsep align char char', 
