@@ -134,9 +134,9 @@ def get_maxlen(length,
     
     gap = maxlength - minlength # gap between minimum and maximum article lengths = the most we can add to minlength
     
-    discounter = longest/gap # how many of these gaps do we have to cover to reach # words in longest article? that's the discounter
+    discounter = (longest-shortest)/gap # how many of these gaps do we have to cover to reach # words in longest article? That's the discounter. Discount by shortest article length to restrict range to between 0 and gap
     
-    maxlength = minlength + (length/discounter) # apply the discounter to decide how many "gap-steps" to add for this article. 
+    maxlength = minlength + ((length-shortest)/discounter) # apply the discounter to decide how many "gap-steps" to add for this article. 
     # Apply gap # gap-steps to reach original maxlength.
     
     return maxlength
