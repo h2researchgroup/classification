@@ -139,7 +139,7 @@ def get_maxlen(length,
     maxlength = minlength + ((length-shortest)/discounter) # apply the discounter to decide how many "gap-steps" to add for this article. 
     # Apply gap # gap-steps to reach original maxlength.
     
-    return maxlength
+    return int(maxlength)
     
 
 def preprocess_text(article, 
@@ -169,10 +169,7 @@ def preprocess_text(article,
     Returns:
         list of lists of str: each element of list is a sentence, each sentence is a list of words
     '''
-    
-    # Create random string (for slicing sentences to certain length)
-    #random_string = "".join(map(chr, os.urandom(75)))
-        
+            
     # Remove page marker junk
     article = article.replace('<plain_text><page sequence="1">', '')
     article = re.sub(r'</page>(\<.*?\>)', ' \n ', article)
@@ -195,6 +192,7 @@ def preprocess_text(article,
     
     while numwords < maxlen: # continue adding words until reaching maxlen
         for sent in article.split('\n'):
+            #print("Cleaning sentence " + str(numsent))
             sent = clean_sentence_apache(sent, 
                                          unhyphenate=True, 
                                          remove_numbers=True, 
@@ -206,12 +204,13 @@ def preprocess_text(article,
             sent = [word for word in sent if word != ''] # remove empty strings
             
             if shorten and numwords < maxlen and len(sent) > 0:
-                gap = maxlen - numwords
+                gap = int(maxlen - numwords)
                 if len(sent) > gap: # if sentence is bigger than gap between current numwords and max # words, shorten it
                     sent = sent[:gap] 
                 doc.append(sent)
                 numwords += len(sent)
-            elif len(sent) > 0:
+                
+            if len(sent) > 0:
                 doc.append(sent)
                 numwords += len(sent)
 

@@ -216,7 +216,7 @@ def clean_sentence_apache(sentence,
     if remove_stopwords:
         junk_words = ["colwidth", "colname", "char", "rowsep", "colsep", 
                       "oasis", "pp", "fn", "sec", "pi", "sc", "id"] # define junk/formatting terms to avoid
-        stop_words = jstor_stop_words + junk_words # simplest way to avoid stopwords and formatting words: combine them!
+        stop_words = set(list(jstor_stop_words) + junk_words) # simplest way to avoid stopwords and formatting words: combine them!
         
         sent_list = [word for word in sent_list if 
                      word not in stop_words and 
