@@ -54,6 +54,7 @@ thisday = date.today().strftime("%m%d%y")
 # directory for prepared data: save files here
 data_fp = root + 'classification/data/'
 model_fp = root + 'classification/models/'
+prepped_fp = root + 'models_storage/preprocessed_texts/'
 
 # Current article lists
 article_list_fp = data_fp + 'filtered_length_index.csv' # Filtered index of research articles
@@ -65,9 +66,9 @@ training_relt_raw_fp = data_fp + 'training_relational_raw_121620.pkl'
 training_demog_raw_fp = data_fp + 'training_demographic_raw_121620.pkl'
 
 # Vectorizers trained on hand-coded data (use to limit vocab of input texts)
-cult_vec_fp = model_fp + f'vectorizer_cult_{str(thisday)}.joblib'
-relt_vec_fp = model_fp + f'vectorizer_relt_{str(thisday)}.joblib'
-demog_vec_fp = model_fp + f'vectorizer_demog_{str(thisday)}.joblib'
+cult_vec_fp = model_fp + f'vectorizer_cult_500_{str(thisday)}.joblib'
+relt_vec_fp = model_fp + f'vectorizer_relt_500_{str(thisday)}.joblib'
+demog_vec_fp = model_fp + f'vectorizer_demog_500_{str(thisday)}.joblib'
 
 # Vocab of vectorizers (for verification purposes)
 cult_vec_feat_fp = model_fp + f'vectorizer_features_cult_{str(thisday)}.csv'
@@ -75,9 +76,9 @@ relt_vec_feat_fp = model_fp + f'vectorizer_features_relt_{str(thisday)}.csv'
 demog_vec_feat_fp = model_fp + f'vectorizer_features_demog_{str(thisday)}.csv'
 
 # Output
-training_cult_prepped_fp = data_fp + f'training_cultural_preprocessed_{str(thisday)}.pkl'
-training_relt_prepped_fp = data_fp + f'training_relational_preprocessed_{str(thisday)}.pkl'
-training_demog_prepped_fp = data_fp + f'training_demographic_preprocessed_{str(thisday)}.pkl'
+training_cult_prepped_fp = data_fp + f'training_cultural_preprocessed_500_{str(thisday)}.pkl'
+training_relt_prepped_fp = data_fp + f'training_relational_preprocessed_500_{str(thisday)}.pkl'
+training_demog_prepped_fp = data_fp + f'training_demographic_preprocessed_500_{str(thisday)}.pkl'
 
 
 ###############################################
@@ -88,7 +89,7 @@ coded_cult = quickpickle_load(training_cult_raw_fp)
 coded_relt = quickpickle_load(training_relt_raw_fp)
 coded_demog = quickpickle_load(training_demog_raw_fp)
 
-'''
+
 # Read full list of articles for new sample selection
 tqdm.pandas(desc='Correcting file paths...')
 articles = (pd.read_csv(article_paths_fp, low_memory=False, header=None, names=['file_name']))
@@ -99,14 +100,16 @@ tqdm.pandas(desc='Loading ALL text files...')
 articles['text'] = articles['file_name'].progress_apply(lambda fp: read_text(fp, shell = True))
 
 # Use articles data to define file name for ALL JSTOR preprocessed text
-all_prepped_fp = data_fp + f'filtered_preprocessed_texts_{str(len(articles))}_{str(thisday)}.pkl'
-'''
+all_prepped_fp = prepped_fp + f'filtered_preprocessed_texts_500_{str(len(articles))}_{str(thisday)}.pkl'
+
 
 ###############################################
 # Preprocess text files
 ###############################################
 
-def preprocess_text(article):
+def preprocess_text(article, 
+                    shorten = True, 
+                    maxlen = 75000):
     '''
     Cleans up articles by removing page marker junk, 
     unicode formatting, and extra whitespaces; 
@@ -118,12 +121,17 @@ def preprocess_text(article):
     and proper nouns (the last not by default).
     
     Args:
-        article: in str format, often long
+        article (str): lots of sentences with punctuation etc, often long
+        shorten (boolean): if True, shorten sentences to at most maxlen words
+        maxlen (int): maximum number of words per sentence
         
     Returns:
         list of lists of str: each element of list is a sentence, each sentence is a list of words
     '''
     
+    # Create random string (for slicing sentences to certain length)
+    random_string = "".join(map(chr, os.urandom(75)))
+        
     # Remove page marker junk
     article = article.replace('<plain_text><page sequence="1">', '')
     article = re.sub(r'</page>(\<.*?\>)', ' \n ', article)
@@ -222,7 +230,7 @@ quickpickle_dump(coded_relt, training_relt_prepped_fp)
 quickpickle_dump(coded_demog, training_demog_prepped_fp)
 
 # Save full, preprocessed text data
-#quickpickle_dump(articles, all_prepped_fp)
+quickpickle_dump(articles, all_prepped_fp)
 
 print("Saved preprocessed text to file.")
 
