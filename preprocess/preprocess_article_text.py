@@ -239,8 +239,14 @@ coded_demog['text'] = coded_demog['text'].progress_apply(
                                  maxlen = 1000, 
                                  minlen = 500))
 
-#tqdm.pandas(desc='Cleaning ALL text files...')
-#articles['text'] = articles['text'].progress_apply(lambda text: preprocess_text(text))
+tqdm.pandas(desc='Cleaning ALL text files...')
+articles['text'] = articles['text'].progress_apply(
+    lambda text: preprocess_text(text, 
+                                 shorten = True, 
+                                 longest = 75000, 
+                                 shortest = 1000, 
+                                 maxlen = 1000, 
+                                 minlen = 500))
 
 
 def collect_article_tokens(article):
