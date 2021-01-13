@@ -66,19 +66,19 @@ training_relt_raw_fp = data_fp + 'training_relational_raw_121620.pkl'
 training_demog_raw_fp = data_fp + 'training_demographic_raw_121620.pkl'
 
 # Vectorizers trained on hand-coded data (use to limit vocab of input texts)
-cult_vec_fp = model_fp + f'vectorizer_cult_500_{str(thisday)}.joblib'
-relt_vec_fp = model_fp + f'vectorizer_relt_500_{str(thisday)}.joblib'
-demog_vec_fp = model_fp + f'vectorizer_demog_500_{str(thisday)}.joblib'
+cult_vec_fp = model_fp + f'vectorizer_cult_upto1k_{str(thisday)}.joblib'
+relt_vec_fp = model_fp + f'vectorizer_relt_upto1k_{str(thisday)}.joblib'
+demog_vec_fp = model_fp + f'vectorizer_demog_upto1k_{str(thisday)}.joblib'
 
 # Vocab of vectorizers (for verification purposes)
-cult_vec_feat_fp = model_fp + f'vectorizer_features_cult_{str(thisday)}.csv'
-relt_vec_feat_fp = model_fp + f'vectorizer_features_relt_{str(thisday)}.csv'
-demog_vec_feat_fp = model_fp + f'vectorizer_features_demog_{str(thisday)}.csv'
+cult_vec_feat_fp = model_fp + f'vectorizer_features_cult_upto1k_{str(thisday)}.csv'
+relt_vec_feat_fp = model_fp + f'vectorizer_features_relt_upto1k_{str(thisday)}.csv'
+demog_vec_feat_fp = model_fp + f'vectorizer_features_demog_upto1k_{str(thisday)}.csv'
 
 # Output
-training_cult_prepped_fp = data_fp + f'training_cultural_preprocessed_500_{str(thisday)}.pkl'
-training_relt_prepped_fp = data_fp + f'training_relational_preprocessed_500_{str(thisday)}.pkl'
-training_demog_prepped_fp = data_fp + f'training_demographic_preprocessed_500_{str(thisday)}.pkl'
+training_cult_prepped_fp = data_fp + f'training_cultural_preprocessed_upto1k_{str(thisday)}.pkl'
+training_relt_prepped_fp = data_fp + f'training_relational_preprocessed_upto1k_{str(thisday)}.pkl'
+training_demog_prepped_fp = data_fp + f'training_demographic_preprocessed_upto1k_{str(thisday)}.pkl'
 
 
 ###############################################
@@ -100,16 +100,54 @@ tqdm.pandas(desc='Loading ALL text files...')
 articles['text'] = articles['file_name'].progress_apply(lambda fp: read_text(fp, shell = True))
 
 # Use articles data to define file name for ALL JSTOR preprocessed text
-all_prepped_fp = prepped_fp + f'filtered_preprocessed_texts_500_{str(len(articles))}_{str(thisday)}.pkl'
+all_prepped_fp = prepped_fp + f'filtered_preprocessed_texts_upto1k_{str(len(articles))}_{str(thisday)}.pkl'
 
 
 ###############################################
 # Preprocess text files
 ###############################################
 
+def get_maxlen(length, 
+               longest, 
+               shortest, 
+               maxlength, 
+               minlength):
+    '''
+    Compute how many words to return for an article. Will be at least minlength and at most maxlength. 
+    Gradate between these based on how long article is relative to longest article in corpus.
+    
+    Longest article will have (length/discounter) = gap between min and max lengths. 
+    Shortest will have (length/discounter) = 0.
+    
+    Formula: maxlength = minlength + (length/discounter)
+    
+    Args:
+        length (int): number of words in preprocessed article text
+        longest (int): longest article in corpus (in # words)
+        shortest (int): shortest article in corpus (in # words)
+        maxlength (int): maximum number of words to return per article
+        minlength (int): minimum number of words to return per article
+        
+    Returns:
+        maxlength (int): how many words to return for this article
+    '''
+    
+    gap = maxlength - minlength # gap between minimum and maximum article lengths = the most we can add to minlength
+    
+    discounter = longest/gap # how many of these gaps do we have to cover to reach # words in longest article? that's the discounter
+    
+    maxlength = minlength + (length/discounter) # apply the discounter to decide how many "gap-steps" to add for this article. 
+    # Apply gap # gap-steps to reach original maxlength.
+    
+    return maxlength
+    
+
 def preprocess_text(article, 
-                    shorten = True, 
-                    maxlen = 75000):
+                    shorten = False, 
+                    longest = 99999999, 
+                    shortest = 0, 
+                    maxlen = 9999999, 
+                    minlen = 0):
     '''
     Cleans up articles by removing page marker junk, 
     unicode formatting, and extra whitespaces; 
@@ -123,39 +161,84 @@ def preprocess_text(article,
     Args:
         article (str): lots of sentences with punctuation etc, often long
         shorten (boolean): if True, shorten sentences to at most maxlen words
-        maxlen (int): maximum number of words per sentence
+        longest (int): number of words in longest article in corpus (get this elsewhere)
+        shortest (int): number of words in shortest article in corpus (depends on filtering)
+        maxlen (int): maximum number of words to return per article; default is huge number, set lower if shorten == True
+        minlen (int): minimum number of words to return per article
         
     Returns:
         list of lists of str: each element of list is a sentence, each sentence is a list of words
     '''
     
     # Create random string (for slicing sentences to certain length)
-    random_string = "".join(map(chr, os.urandom(75)))
+    #random_string = "".join(map(chr, os.urandom(75)))
         
     # Remove page marker junk
     article = article.replace('<plain_text><page sequence="1">', '')
     article = re.sub(r'</page>(\<.*?\>)', ' \n ', article)
     
-    doc = [] # list to hold tokenized sentences making up article
-    for sent in article.split('\n'):
-        sent = clean_sentence_apache(sent, 
-                                     unhyphenate=True, 
-                                     remove_numbers=True, 
-                                     remove_acronyms=False, 
-                                     remove_stopwords=True, 
-                                     remove_propernouns=False, 
-                                     return_string=False
-                                    )
-        sent = [word for word in sent if word != '']
-        if len(sent) > 0:
-            doc.append(sent)
+    # Compute maximum length for this article: from minlen to maxlen, gradated depending on longest
+    if shorten:
+        article_length = len(article.split()) # tokenize (split by spaces) then count # words in article
+        
+        if article_length > minlen: # if article is longer than minimum length to extract, decide how much to extract
+            maxlen = get_maxlen(article_length, 
+                                longest, 
+                                shortest, 
+                                maxlen, 
+                                minlen)
+        elif article_length <= minlen: # if article isn't longer than minimum length to extract, just take whole thing
+            shorten = False # don't shorten
     
+    doc = [] # list to hold tokenized sentences making up article
+    numwords = 0 # initialize word counter
+    
+    while numwords < maxlen: # continue adding words until reaching maxlen
+        for sent in article.split('\n'):
+            sent = clean_sentence_apache(sent, 
+                                         unhyphenate=True, 
+                                         remove_numbers=True, 
+                                         remove_acronyms=False, 
+                                         remove_stopwords=True, 
+                                         remove_propernouns=False, 
+                                         return_string=False
+                                        )
+            sent = [word for word in sent if word != ''] # remove empty strings
+            
+            if shorten and numwords < maxlen and len(sent) > 0:
+                gap = maxlen - numwords
+                if len(sent) > gap: # if sentence is bigger than gap between current numwords and max # words, shorten it
+                    sent = sent[:gap] 
+                doc.append(sent)
+                numwords += len(sent)
+            elif len(sent) > 0:
+                doc.append(sent)
+                numwords += len(sent)
+
     return doc
 
 tqdm.pandas(desc='Cleaning labeled text files...')
-coded_cult['text'] = coded_cult['text'].progress_apply(lambda text: preprocess_text(text))
-coded_relt['text'] = coded_relt['text'].progress_apply(lambda text: preprocess_text(text))
-coded_demog['text'] = coded_demog['text'].progress_apply(lambda text: preprocess_text(text))
+coded_cult['text'] = coded_cult['text'].progress_apply(
+    lambda text: preprocess_text(text, 
+                                 shorten = True, 
+                                 longest = 75000, 
+                                 shortest = 1000, 
+                                 maxlen = 1000, 
+                                 minlen = 500))
+coded_relt['text'] = coded_relt['text'].progress_apply(
+    lambda text: preprocess_text(text, 
+                                 shorten = True, 
+                                 longest = 75000, 
+                                 shortest = 1000, 
+                                 maxlen = 1000, 
+                                 minlen = 500))
+coded_demog['text'] = coded_demog['text'].progress_apply(
+    lambda text: preprocess_text(text, 
+                                 shorten = True, 
+                                 longest = 75000, 
+                                 shortest = 1000, 
+                                 maxlen = 1000, 
+                                 minlen = 500))
 
 #tqdm.pandas(desc='Cleaning ALL text files...')
 #articles['text'] = articles['text'].progress_apply(lambda text: preprocess_text(text))
