@@ -66,19 +66,19 @@ training_relt_raw_fp = data_fp + 'training_relational_raw_121620.pkl'
 training_demog_raw_fp = data_fp + 'training_demographic_raw_121620.pkl'
 
 # Vectorizers trained on hand-coded data (use to limit vocab of input texts)
-cult_vec_fp = model_fp + f'vectorizer_cult_upto1k_{str(thisday)}.joblib'
-relt_vec_fp = model_fp + f'vectorizer_relt_upto1k_{str(thisday)}.joblib'
-demog_vec_fp = model_fp + f'vectorizer_demog_upto1k_{str(thisday)}.joblib'
+cult_vec_fp = model_fp + f'vectorizer_cult_{str(thisday)}.joblib'
+relt_vec_fp = model_fp + f'vectorizer_relt_{str(thisday)}.joblib'
+demog_vec_fp = model_fp + f'vectorizer_demog_{str(thisday)}.joblib'
 
 # Vocab of vectorizers (for verification purposes)
-cult_vec_feat_fp = model_fp + f'vectorizer_features_cult_upto1k_{str(thisday)}.csv'
-relt_vec_feat_fp = model_fp + f'vectorizer_features_relt_upto1k_{str(thisday)}.csv'
-demog_vec_feat_fp = model_fp + f'vectorizer_features_demog_upto1k_{str(thisday)}.csv'
+cult_vec_feat_fp = model_fp + f'vectorizer_features_cult_{str(thisday)}.csv'
+relt_vec_feat_fp = model_fp + f'vectorizer_features_relt_{str(thisday)}.csv'
+demog_vec_feat_fp = model_fp + f'vectorizer_features_demog_{str(thisday)}.csv'
 
 # Output
-training_cult_prepped_fp = data_fp + f'training_cultural_preprocessed_upto1k_{str(thisday)}.pkl'
-training_relt_prepped_fp = data_fp + f'training_relational_preprocessed_upto1k_{str(thisday)}.pkl'
-training_demog_prepped_fp = data_fp + f'training_demographic_preprocessed_upto1k_{str(thisday)}.pkl'
+training_cult_prepped_fp = data_fp + f'training_cultural_preprocessed_{str(thisday)}.pkl'
+training_relt_prepped_fp = data_fp + f'training_relational_preprocessed_{str(thisday)}.pkl'
+training_demog_prepped_fp = data_fp + f'training_demographic_preprocessed_{str(thisday)}.pkl'
 
 
 ###############################################
@@ -100,7 +100,7 @@ tqdm.pandas(desc='Loading ALL text files...')
 articles['text'] = articles['file_name'].progress_apply(lambda fp: read_text(fp, shell = True))
 
 # Use articles data to define file name for ALL JSTOR preprocessed text
-all_prepped_fp = prepped_fp + f'filtered_preprocessed_texts_upto1k_{str(len(articles))}_{str(thisday)}.pkl'
+all_prepped_fp = prepped_fp + f'filtered_preprocessed_texts_{str(len(articles))}_{str(thisday)}.pkl'
 
 
 ###############################################
@@ -144,9 +144,9 @@ def get_maxlen(length,
 
 def preprocess_text(article, 
                     shorten = False, 
-                    longest = 99999999, 
+                    longest = 999999, 
                     shortest = 0, 
-                    maxlen = 9999999, 
+                    maxlen = 999999, 
                     minlen = 0):
     '''
     Cleans up articles by removing page marker junk, 
@@ -190,63 +190,73 @@ def preprocess_text(article,
     doc = [] # list to hold tokenized sentences making up article
     numwords = 0 # initialize word counter
     
-    while numwords < maxlen: # continue adding words until reaching maxlen
+    # Initialize word cleaning function
+    clean_sent = clean_sentence_apache(unhyphenate=True, 
+                                       remove_numbers=True, 
+                                       remove_acronyms=False, 
+                                       remove_stopwords=True, 
+                                       remove_propernouns=False, 
+                                       return_string=False
+                                      )
+    
+    if shorten:
+        while numwords < maxlen: # continue adding words until reaching maxlen
+            for sent in article.split('\n'):
+                #sent = clean_sent(sent)
+                sent = [word for word in clean_sent(sent) if word != ''] # remove empty strings
+
+                if numwords < maxlen and len(sent) > 0:
+                    gap = int(maxlen - numwords)
+                    if len(sent) > gap: # if sentence is bigger than gap between current numwords and max # words, shorten it
+                        sent = sent[:gap] 
+                    doc.append(sent)
+                    numwords += len(sent)
+
+                if len(sent) > 0:
+                    doc.append(sent)
+                    numwords += len(sent)
+    
+    else: # take whole sentence (don't shorten)
         for sent in article.split('\n'):
-            #print("Cleaning sentence " + str(numsent))
-            sent = clean_sentence_apache(sent, 
-                                         unhyphenate=True, 
-                                         remove_numbers=True, 
-                                         remove_acronyms=False, 
-                                         remove_stopwords=True, 
-                                         remove_propernouns=False, 
-                                         return_string=False
-                                        )
-            sent = [word for word in sent if word != ''] # remove empty strings
+            #sent = clean_sent(sent)
+            sent = [word for word in clean_sent(sent) if word != ''] # remove empty strings
             
-            if shorten and numwords < maxlen and len(sent) > 0:
-                gap = int(maxlen - numwords)
-                if len(sent) > gap: # if sentence is bigger than gap between current numwords and max # words, shorten it
-                    sent = sent[:gap] 
-                doc.append(sent)
-                numwords += len(sent)
-                
             if len(sent) > 0:
                 doc.append(sent)
-                numwords += len(sent)
 
     return doc
 
 tqdm.pandas(desc='Cleaning labeled text files...')
 coded_cult['text'] = coded_cult['text'].progress_apply(
     lambda text: preprocess_text(text, 
-                                 shorten = True, 
-                                 longest = 75000, 
-                                 shortest = 1000, 
-                                 maxlen = 1000, 
-                                 minlen = 500))
+                                 shorten = False))
+                                 #longest = 75000, 
+                                 #shortest = 1000, 
+                                 #maxlen = 1000, 
+                                 #minlen = 500))
 coded_relt['text'] = coded_relt['text'].progress_apply(
     lambda text: preprocess_text(text, 
-                                 shorten = True, 
-                                 longest = 75000, 
-                                 shortest = 1000, 
-                                 maxlen = 1000, 
-                                 minlen = 500))
+                                 shorten = False))
+                                 #longest = 75000, 
+                                 #shortest = 1000, 
+                                 #maxlen = 1000, 
+                                 #minlen = 500))
 coded_demog['text'] = coded_demog['text'].progress_apply(
     lambda text: preprocess_text(text, 
-                                 shorten = True, 
-                                 longest = 75000, 
-                                 shortest = 1000, 
-                                 maxlen = 1000, 
-                                 minlen = 500))
+                                 shorten = False))
+                                 #longest = 75000, 
+                                 #shortest = 1000, 
+                                 #maxlen = 1000, 
+                                 #minlen = 500))
 
 tqdm.pandas(desc='Cleaning ALL text files...')
 articles['text'] = articles['text'].progress_apply(
     lambda text: preprocess_text(text, 
-                                 shorten = True, 
-                                 longest = 75000, 
-                                 shortest = 1000, 
-                                 maxlen = 1000, 
-                                 minlen = 500))
+                                 shorten = False))
+                                 #longest = 75000, 
+                                 #shortest = 1000, 
+                                 #maxlen = 1000, 
+                                 #minlen = 500))
 
 
 def collect_article_tokens(article):
@@ -284,24 +294,26 @@ jstor_stopwords = set(["a", "an", "and", "are", "as", "at", "be", "but", "by", "
 vectorizer = TfidfVectorizer(max_features=100000, min_df=1, max_df=0.8, stop_words=jstor_stopwords) # TFIDF
 
 X_cult = vectorizer.fit_transform(cult_tokens)
-joblib.dump(vectorizer, open(cult_vec_fp, "wb"))
-with open(cult_vec_feat_fp,'w') as f:
+joblib.dump(vectorizer, open(cult_vec_fp, "wb")) # Save DTM
+with open(cult_vec_feat_fp,'w') as f: # Save DTM features
     writer = csv.writer(f)
     writer.writerows([vectorizer.get_feature_names()])
     
 print('Number of features in cultural vectorizer:', len(vectorizer.get_feature_names()))
 
+vectorizer = TfidfVectorizer(max_features=100000, min_df=1, max_df=0.8, stop_words=jstor_stopwords) # TFIDF
 X_relt = vectorizer.fit_transform(relt_tokens)
-joblib.dump(vectorizer, open(relt_vec_fp, "wb"))
-with open(relt_vec_feat_fp,'w') as f:
+joblib.dump(vectorizer, open(relt_vec_fp, "wb")) # Save DTM
+with open(relt_vec_feat_fp,'w') as f: # Save features
     writer = csv.writer(f)
     writer.writerows([vectorizer.get_feature_names()])
     
 print('Number of features in relational vectorizer:', len(vectorizer.get_feature_names()))
 
+vectorizer = TfidfVectorizer(max_features=100000, min_df=1, max_df=0.8, stop_words=jstor_stopwords) # TFIDF
 X_demog = vectorizer.fit_transform(demog_tokens)
-joblib.dump(vectorizer, open(demog_vec_fp, "wb"))
-with open(demog_vec_feat_fp,'w') as f:
+joblib.dump(vectorizer, open(demog_vec_fp, "wb")) # Save DTM
+with open(demog_vec_feat_fp,'w') as f: # Save features
     writer = csv.writer(f)
     writer.writerows([vectorizer.get_feature_names()])
 
