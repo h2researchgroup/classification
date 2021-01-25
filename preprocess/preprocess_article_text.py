@@ -190,20 +190,17 @@ def preprocess_text(article,
     doc = [] # list to hold tokenized sentences making up article
     numwords = 0 # initialize word counter
     
-    # Initialize word cleaning function
-    clean_sent = clean_sentence_apache(unhyphenate=True, 
-                                       remove_numbers=True, 
-                                       remove_acronyms=False, 
-                                       remove_stopwords=True, 
-                                       remove_propernouns=False, 
-                                       return_string=False
-                                      )
-    
     if shorten:
         while numwords < maxlen: # continue adding words until reaching maxlen
             for sent in article.split('\n'):
                 #sent = clean_sent(sent)
-                sent = [word for word in clean_sent(sent) if word != ''] # remove empty strings
+                sent = [word for word in clean_sentence_apache(sent, 
+                                                               unhyphenate=True, 
+                                                               remove_numbers=True, 
+                                                               remove_acronyms=False, 
+                                                               remove_stopwords=True, 
+                                                               remove_propernouns=False, 
+                                                               return_string=False) if word != ''] # remove empty strings
 
                 if numwords < maxlen and len(sent) > 0:
                     gap = int(maxlen - numwords)
@@ -219,7 +216,13 @@ def preprocess_text(article,
     else: # take whole sentence (don't shorten)
         for sent in article.split('\n'):
             #sent = clean_sent(sent)
-            sent = [word for word in clean_sent(sent) if word != ''] # remove empty strings
+            sent = [word for word in clean_sentence_apache(sent, 
+                                                           unhyphenate=True, 
+                                                           remove_numbers=True, 
+                                                           remove_acronyms=False, 
+                                                           remove_stopwords=True, 
+                                                           remove_propernouns=False, 
+                                                           return_string=False) if word != ''] # remove empty strings
             
             if len(sent) > 0:
                 doc.append(sent)
