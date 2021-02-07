@@ -1,3 +1,18 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+'''
+@title: Train CNN Model for Classifying JSTOR Articles
+@authors: Jaren Haber, PhD, Georgetown University; Yoon Sung Hong, Wayfair
+@coauthor: Prof. Heather Haveman, UC Berkeley
+@contact: Jaren.Haber@georgetown.edu
+@project: Computational Literature Review of Organizational Scholarship
+@repo: https://github.com/h2researchgroup/classification/
+@date: February 2020
+@description: Use preprocessed texts and TFIDF vectorizers to build Concurrent Neural Network (CNN) for classifying academic articles into perspectives on organizational theory (yes/no only).
+'''
+
+
 ######################################################
 # Import libraries
 ######################################################
@@ -76,6 +91,11 @@ cult_vec_fp = model_fp + 'vectorizer_cult_012521.joblib'
 relt_vec_fp = model_fp + 'vectorizer_relt_012521.joblib'
 demog_vec_fp = model_fp + 'vectorizer_demog_012521.joblib'
 
+
+######################################################
+# Load data
+######################################################
+
 cult_df = quickpickle_load(cult_labeled_fp)
 relt_df = quickpickle_load(relt_labeled_fp)
 demog_df = quickpickle_load(demog_labeled_fp)
@@ -95,6 +115,7 @@ if drop_unsure:
     demog_df_yes = demog_df[demog_df['demographic_score'] == 1.0]
     demog_df_no = demog_df[demog_df['demographic_score'] == 0.0]
     demog_df = pd.concat([demog_df_yes, demog_df_no])
+    
     
 def collect_article_tokens(article, return_string=False):
     '''
@@ -121,23 +142,6 @@ def collect_article_tokens(article, return_string=False):
             tokens += [word for word in sent] # add each word to list of tokens
         return tokens # return list of tokens
 
-# For capturing word frequencies, add all words from each article to single, shared list (can't use this to create models)
-cult_tokens = []; cult_df['text'].apply(lambda article: cult_tokens.extend([word for word in collect_article_tokens(article)]))
-relt_tokens = []; relt_df['text'].apply(lambda article: relt_tokens.extend([word for word in collect_article_tokens(article)]))
-demog_tokens = []; demog_df['text'].apply(lambda article: demog_tokens.extend([word for word in collect_article_tokens(article)]))
-print()
-
-# Add sentences from each article to empty list:
-cult_sents = []; cult_df['text'].apply(
-    lambda article: cult_sents.extend(
-        [' '.join([word for word in sent]) for sent in article]))
-relt_sents = []; relt_df['text'].apply(
-    lambda article: relt_sents.extend(
-        [' '.join([word for word in sent]) for sent in article]))
-demog_sents = []; demog_df['text'].apply(
-    lambda article: demog_sents.extend(
-        [' '.join([word for word in sent]) for sent in article]))
-
 
 # Collect articles: Add each article as single str to list of str:
 cult_docs = [] # empty list
@@ -161,6 +165,10 @@ demog_df['text'].apply(
             article, 
             return_string=True)))
 
+
+######################################################
+# Vectorize texts
+######################################################
 
 # Define stopwords used by JSTOR
 jstor_stopwords = set(["a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "if", "in", "into", "is", "it", "no", "not", "of", "on", "or", "such", "that", "the", "their", "then", "there", "these", "they", "this", "to", "was", "will", "with"])
@@ -198,39 +206,6 @@ print('Number of features in preprocessed text for training demographic classifi
 #print(list(test)[::1000])
 print()
 
-######################################################
-# Balance x_train, y_train
-######################################################
-
-def resample_data(X_train, Y_train, undersample = False, sampling_ratio = 1.0):
-    """
-    Args:
-        X_train: X training data
-        Y_train: Y training data
-        undersample: boolean for over or undersampling
-        sampling_ratio: ratio of minority to majority class
-        
-        archived/not used:
-        sampling_strategy: strategy for resampled distribution
-            if oversample: 'majority' makes minority = to majority
-            if undersample: 'minority' makes majority = to minority
-            
-    Returns:
-        X_balanced: predictors at balanced ratio
-        Y_balanced: outcomes at balanced ratio
-    """
-    
-    if undersample == True:
-        undersample = RandomUnderSampler(sampling_strategy=sampling_ratio)
-        X_balanced, Y_balanced = undersample.fit_resample(X_train, Y_train)
-    else:
-        oversample = RandomOverSampler(sampling_strategy=sampling_ratio)
-        X_balanced, Y_balanced = oversample.fit_resample(X_train, Y_train)
-    
-    print(f'Y_train: {Counter(Y_train)}\nY_resample: {Counter(Y_balanced)}')
-    
-    return X_balanced, Y_balanced
-
 
 ######################################################
 # Prepare training and validation data
@@ -260,14 +235,42 @@ X_train, X_validate, Y_train, Y_validate = train_test_split(
 print(f'Y_train Distribution: {Counter(Y_train).most_common()}')
 
 
-######################################################
-# Oversample to desirable ratio
-######################################################
+def resample_data(X_train, Y_train, undersample = False, sampling_ratio = 1.0):
+    """
+    Balance x_train, y_train
+    
+    Args:
+        X_train: X training data
+        Y_train: Y training data
+        undersample: boolean for over or undersampling
+        sampling_ratio: ratio of minority to majority class
+        
+        archived/not used:
+        sampling_strategy: strategy for resampled distribution
+            if oversample: 'majority' makes minority = to majority
+            if undersample: 'minority' makes majority = to minority
+            
+    Returns:
+        X_balanced: predictors at balanced ratio
+        Y_balanced: outcomes at balanced ratio
+    """
+    
+    if undersample == True:
+        undersample = RandomUnderSampler(sampling_strategy=sampling_ratio)
+        X_balanced, Y_balanced = undersample.fit_resample(X_train, Y_train)
+    else:
+        oversample = RandomOverSampler(sampling_strategy=sampling_ratio)
+        X_balanced, Y_balanced = oversample.fit_resample(X_train, Y_train)
+    
+    print(f'Y_train: {Counter(Y_train)}\nY_resample: {Counter(Y_balanced)}')
+    
+    return X_balanced, Y_balanced
 
 # Use these settings here and below
 sampling_ratio = 1.0 # ratio of minority to majority cases
 undersample = False # whether to undersample or oversample
 
+# Oversample to desirable ratio
 X_balanced, Y_balanced = resample_data(
     X_cult, 
     Y, 
