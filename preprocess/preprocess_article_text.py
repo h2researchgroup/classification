@@ -33,6 +33,7 @@ from datetime import date # For working with dates & times
 from nltk import sent_tokenize
 import joblib
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
+from gensim.models.phrases import Phrases # for gathering multi-word expressions
 import tables
 import random
 import os; from os import listdir; from os.path import isfile, join
@@ -41,6 +42,9 @@ import os; from os import listdir; from os.path import isfile, join
 from clean_text import stopwords_make, punctstr_make, unicode_make, apache_tokenize, clean_sentence_apache # for preprocessing text
 from quickpickle import quickpickle_dump, quickpickle_load # for quick saving & loading to pickle format
 from text_to_file import write_textlist, read_text # custom scripts for reading and writing text lists to .txt files
+
+# Define stopwords used by JSTOR
+jstor_stopwords = set(["a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "if", "in", "into", "is", "it", "no", "not", "of", "on", "or", "such", "that", "the", "their", "then", "there", "these", "they", "this", "to", "was", "will", "with"])
 
 
 ###############################################
@@ -64,21 +68,25 @@ article_paths_fp = data_fp + 'filtered_length_article_paths.csv' # List of artic
 training_cult_raw_fp = data_fp + 'training_cultural_raw_121620.pkl'
 training_relt_raw_fp = data_fp + 'training_relational_raw_121620.pkl'
 training_demog_raw_fp = data_fp + 'training_demographic_raw_121620.pkl'
+training_orgs_raw_fp = data_fp + 'training_orgs_raw_022121.pkl'
 
 # Vectorizers trained on hand-coded data (use to limit vocab of input texts)
 cult_vec_fp = model_fp + f'vectorizer_cult_{str(thisday)}.joblib'
 relt_vec_fp = model_fp + f'vectorizer_relt_{str(thisday)}.joblib'
 demog_vec_fp = model_fp + f'vectorizer_demog_{str(thisday)}.joblib'
+orgs_vec_fp = model_fp + f'vectorizer_orgs_{str(thisday)}.joblib'
 
 # Vocab of vectorizers (for verification purposes)
 cult_vec_feat_fp = model_fp + f'vectorizer_features_cult_{str(thisday)}.csv'
 relt_vec_feat_fp = model_fp + f'vectorizer_features_relt_{str(thisday)}.csv'
 demog_vec_feat_fp = model_fp + f'vectorizer_features_demog_{str(thisday)}.csv'
+orgs_vec_feat_fp = model_fp + f'vectorizer_features_orgs_{str(thisday)}.csv'
 
 # Output
 training_cult_prepped_fp = data_fp + f'training_cultural_preprocessed_{str(thisday)}.pkl'
 training_relt_prepped_fp = data_fp + f'training_relational_preprocessed_{str(thisday)}.pkl'
 training_demog_prepped_fp = data_fp + f'training_demographic_preprocessed_{str(thisday)}.pkl'
+training_orgs_prepped_fp = data_fp + f'training_orgs_preprocessed_{str(thisday)}.pkl'
 
 
 ###############################################
@@ -88,7 +96,7 @@ training_demog_prepped_fp = data_fp + f'training_demographic_preprocessed_{str(t
 coded_cult = quickpickle_load(training_cult_raw_fp)
 coded_relt = quickpickle_load(training_relt_raw_fp)
 coded_demog = quickpickle_load(training_demog_raw_fp)
-
+coded_orgs = quickpickle_load(training_orgs_raw_fp)
 
 # Read full list of articles for new sample selection
 tqdm.pandas(desc='Correcting file paths...')
@@ -251,6 +259,13 @@ coded_demog['text'] = coded_demog['text'].progress_apply(
                                  #shortest = 1000, 
                                  #maxlen = 1000, 
                                  #minlen = 500))
+coded_orgs['text'] = coded_orgs['text'].progress_apply(
+    lambda text: preprocess_text(text, 
+                                 shorten = False))
+                                 #longest = 75000, 
+                                 #shortest = 1000, 
+                                 #maxlen = 1000, 
+                                 #minlen = 500))
 
 tqdm.pandas(desc='Cleaning ALL text files...')
 articles['text'] = articles['text'].progress_apply(
@@ -261,6 +276,56 @@ articles['text'] = articles['text'].progress_apply(
                                  #maxlen = 1000, 
                                  #minlen = 500))
 
+
+###############################################
+# Detect and parse common multi-word expressions (MWEs)
+###############################################
+
+# Notes on gensim.phrases.Phrases module: 
+# This module detects MWEs in sentences based on collocation counts. A bigram/trigram needs to occur X number of times together (a 'collocation') relative to Y number of times individually in order to be considered a common MWE.
+# Param 'threshold' affects likelihood of forming phrases: how high X needs to be relative to Y. A higher threshold means there will be fewer phrases in the result. 
+# The formula: A phrase of words a and b is accepted if (cnt(a, b) - min_count) * N / (cnt(a) * cnt(b)) > threshold, where N is the total vocabulary size. 
+# The default threshold is 10.0.
+
+def get_phrased(article, phrase_model):
+    '''
+    Parse phrases in article using phrase-finding model.
+    
+    Args:
+        article: list of lists of words (each list is a sentence)
+    Returns:
+        article: same format, with phrases inserted where appropriate
+    '''
+    
+    article = [phrase_model[sent] for sent in article] 
+        
+    return article
+
+print("Detecting phrases in list of sentences...")
+
+# Add each sentence from each article to empty list, making long list of all sentences:
+sent_list = []; articles['text'].apply(lambda article: sent_list.append([sent for sent in article]))
+
+phrase_finder = Phrases(sent_list, min_count=10, delimiter=b'_', common_terms=jstor_stopwords, threshold=10) 
+
+tqdm.pandas(desc='Parsing common phrases...')
+coded_cult['text'] = articles['text'].progress_apply(
+    lambda text: get_phrased(text, phrase_finder))
+coded_relt['text'] = articles['text'].progress_apply(
+    lambda text: get_phrased(text, phrase_finder))
+coded_demog['text'] = articles['text'].progress_apply(
+    lambda text: get_phrased(text, phrase_finder))
+coded_orgs['text'] = articles['text'].progress_apply(
+    lambda text: get_phrased(text, phrase_finder))
+
+tqdm.pandas(desc='Parsing common phrases in ALL texts...')
+articles['text'] = articles['text'].progress_apply(
+    lambda text: get_phrased(text, phrase_finder))
+
+
+###############################################
+# Vectorize texts and save vectorizers to disk
+###############################################
 
 def collect_article_tokens(article):
     '''
@@ -279,18 +344,11 @@ def collect_article_tokens(article):
         
     return tokens
 
-# Add each word from each article to empty list:
+# Add each word from each article to empty list, making long list of all tokens:
 cult_tokens = []; coded_cult['text'].apply(lambda article: cult_tokens.extend([word for word in collect_article_tokens(article)]))
 relt_tokens = []; coded_relt['text'].apply(lambda article: relt_tokens.extend([word for word in collect_article_tokens(article)]))
 demog_tokens = []; coded_demog['text'].apply(lambda article: demog_tokens.extend([word for word in collect_article_tokens(article)]))
-
-
-###############################################
-# Vectorize texts and save vectorizers to disk
-###############################################
-
-# Define stopwords used by JSTOR
-jstor_stopwords = set(["a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "if", "in", "into", "is", "it", "no", "not", "of", "on", "or", "such", "that", "the", "their", "then", "there", "these", "they", "this", "to", "was", "will", "with"])
+orgs_tokens = []; coded_orgs['text'].apply(lambda article: orgs_tokens.extend([word for word in collect_article_tokens(article)]))
 
 # Use TFIDF weighted DTM because results in better classifier accuracy than unweighted
 #vectorizer = CountVectorizer(max_features=100000, min_df=1, max_df=0.8, stop_words=jstor_stopwords) # DTM
@@ -322,6 +380,15 @@ with open(demog_vec_feat_fp,'w') as f: # Save features
 
 print('Number of features in demographic vectorizer:', len(vectorizer.get_feature_names()))
 
+vectorizer = TfidfVectorizer(max_features=100000, min_df=1, max_df=0.8, stop_words=jstor_stopwords) # TFIDF
+X_orgs = vectorizer.fit_transform(orgs_tokens)
+joblib.dump(vectorizer, open(orgs_vec_fp, "wb")) # Save DTM
+with open(orgs_vec_feat_fp,'w') as f: # Save features
+    writer = csv.writer(f)
+    writer.writerows([vectorizer.get_feature_names()])
+
+print('Number of features in organizational sociology vectorizer:', len(vectorizer.get_feature_names()))
+
 
 ###############################################
 # Save preprocessed text files
@@ -331,6 +398,7 @@ print('Number of features in demographic vectorizer:', len(vectorizer.get_featur
 quickpickle_dump(coded_cult, training_cult_prepped_fp)
 quickpickle_dump(coded_relt, training_relt_prepped_fp)
 quickpickle_dump(coded_demog, training_demog_prepped_fp)
+quickpickle_dump(coded_orgs, training_orgs_prepped_fp)
 
 # Save full, preprocessed text data
 quickpickle_dump(articles, all_prepped_fp)
