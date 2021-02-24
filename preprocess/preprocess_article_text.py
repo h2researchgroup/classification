@@ -65,9 +65,9 @@ article_list_fp = data_fp + 'filtered_length_index.csv' # Filtered index of rese
 article_paths_fp = data_fp + 'filtered_length_article_paths.csv' # List of article file paths
 
 # Labeled data
-training_cult_raw_fp = data_fp + 'training_cultural_raw_121620.pkl'
-training_relt_raw_fp = data_fp + 'training_relational_raw_121620.pkl'
-training_demog_raw_fp = data_fp + 'training_demographic_raw_121620.pkl'
+training_cult_raw_fp = data_fp + 'training_cultural_raw_022221.pkl'
+training_relt_raw_fp = data_fp + 'training_relational_raw_022221.pkl'
+training_demog_raw_fp = data_fp + 'training_demographic_raw_022221.pkl'
 training_orgs_raw_fp = data_fp + 'training_orgs_raw_022121.pkl'
 
 # Vectorizers trained on hand-coded data (use to limit vocab of input texts)
