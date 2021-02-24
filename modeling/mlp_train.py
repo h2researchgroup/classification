@@ -244,8 +244,8 @@ Y_train = np.array(Y_train)
 Y_validate = np.array(Y_validate)
 
 
-X_train = np.expand_dims(X_train, axis=2)
-X_validate = np.expand_dims(X_validate, axis=2)
+# X_train = np.expand_dims(X_train, axis=2)
+# X_validate = np.expand_dims(X_validate, axis=2)
 
 
 
@@ -291,9 +291,12 @@ X_balanced, Y_balanced = resample_data(
     undersample=undersample, 
     sampling_ratio=sampling_ratio)
 
+# X_balanced = np.array(X_balanced.todense())
+# Y_balanced = np.array(Y_balanced.todense())
+
 
 ######################################################
-# Build CNN
+# Build MLP
 ######################################################
 
 from keras.models import Sequential
@@ -302,39 +305,39 @@ from keras.layers import Dropout
 from keras.models import Model
 from keras.layers import Input
 
+X_balanced.sort_indices()
+# Y_balanced.sort_indices()
 
-n_sample = X_train.shape[0]
-len_input = X_train.shape[1]
+n_sample = X_balanced.shape[0]
+len_input = X_balanced.shape[1]
 
+from sklearn.model_selection import StratifiedKFold
+kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=0)
+cvscores = []
+for train, test in kfold.split(X_balanced, Y_balanced):
+    #create model
+    model = Sequential()
+    #add model layers
+    # inp = Input(shape=(len_input, 1))
+    model.add(Dense(32, input_dim=(len_input), activation='relu'))
+    model.add(Dropout(0.2))
+    model.add(Dense(16, activation='relu'))
+    model.add(Dropout(0.2))
+    model.add(Dense(1, activation='sigmoid'))
+    # compile the keras model
+    model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+    # fit the keras model on the dataset
+    model.fit(X_balanced[train], Y_balanced[train], epochs=200, batch_size=10)
+    scores = model.evaluate(X_balanced[test], Y_balanced[test], verbose=0)
+    print("%s: %.2f%%" % (model.metrics_names[1], scores[1]*100))
+    cvscores.append(scores[1] * 100)
+print("%.2f%% (+/- %.2f%%)" % (np.mean(cvscores), np.std(cvscores)))
 
-#create model
-model = Sequential()
-#add model layers
-inp = Input(shape=(len_input, 1))
-# conv1 = Conv1D(filters=512, kernel_size=5, activation='relu')(inp)
-# conv12 = Conv1D(filters=256, kernel_size=5, activation='relu')(inp)
-# drop11 = Dropout(0.2)(conv12)
-# conv2 = Conv1D(filters=128, kernel_size=5, activation='relu')(drop11)
-# drop21 = Dropout(0.2)(conv2)
-# conv22 = Conv1D(filters=64, kernel_size =10, activation='relu')(inp)
-# # drop22 = Dropout(0.2)(conv22)
-conv32 = Conv1D(filters=64, kernel_size =10, activation='relu')(inp)
-drop33 = Dropout(0.6)(conv32)
-conv42 = Conv1D(filters=16, kernel_size =10, activation='relu')(drop33)
-drop33 = Dropout(0.6)(conv32)
-pool2 = Flatten()(conv42) # this is an option to pass from 3d to 2d
-out = Dense(1, activation='softmax')(pool2) # the output dim must be equal to the num of class if u use softmax - binary
-model = Model(inp, out)
-#compile model using accuracy to measure model performance
-model.compile(optimizer='adam', loss='mean_squared_error', metrics=['accuracy'])
-#show summary
+#predicting probability
+y_pred = model.predict_proba(X_validate)
+#summary
 model.summary()
-#train the model
-model.fit(X_train, Y_train, validation_data=(X_validate, Y_validate), epochs=200)
 #save model
-model.save("cnn_model")
-#######for model prediction output with our other texts ######
-#insert text data here to predict label
-model.predict(X_validate[:4])
+model.save("mlp_model")
 
 # sys.close()
