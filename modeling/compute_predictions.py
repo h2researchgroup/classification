@@ -56,19 +56,20 @@ thisday = date.today().strftime("%m%d%y")
 # Root paths for prepared data and models
 data_fp = root + 'classification/data/'
 model_fp = root + 'classification/models/'
+prepped_fp = root + 'models_storage/preprocessed_texts/'
 
 # Path to ALL JSTOR preprocessed text
-all_prepped_fp = data_fp + 'filtered_preprocessed_texts_65365_120720.pkl'
+all_prepped_fp = prepped_fp + 'filtered_preprocessed_texts_65365_012521.pkl'
 
 # Model filepaths
-cult_model_fp = model_fp + 'classifier_cult_121520.joblib'
-relt_model_fp = model_fp + 'classifier_relt_121520.joblib'
-demog_model_fp = model_fp + 'classifier_demog_121520.joblib'
+cult_model_fp = model_fp + 'classifier_cult_MLP_012521.joblib'
+relt_model_fp = model_fp + 'classifier_relt_MLP_012521.joblib'
+demog_model_fp = model_fp + 'classifier_demog_MLP_012521.joblib'
 
 # Vectorizers trained on hand-coded data (use to limit vocab of input texts)
-cult_vec_fp = model_fp + 'vectorizer_cult_121520.joblib'
-relt_vec_fp = model_fp + 'vectorizer_relt_121520.joblib'
-demog_vec_fp = model_fp + 'vectorizer_demog_121520.joblib'
+cult_vec_fp = model_fp + 'vectorizer_cult_012521.joblib'
+relt_vec_fp = model_fp + 'vectorizer_relt_012521.joblib'
+demog_vec_fp = model_fp + 'vectorizer_demog_012521.joblib'
 
 
 ###############################################
@@ -80,7 +81,7 @@ print("Reading preprocessed article text data...")
 articles = quickpickle_load(all_prepped_fp)
 
 # Use preprocessed data on ALL JSTOR articles to define file path for ML predictions on texts
-predicted_fp = model_fp + f'predictions_RF_{str(len(articles))}_{str(thisday)}.pkl'
+predicted_fp = model_fp + f'predictions_MLP_{str(len(articles))}_{str(thisday)}.pkl'
 
 
 ######################################################
@@ -133,14 +134,18 @@ def compute_predictions(text, vectorizer_model, class_model):
         
     return label, prob_yes, prob_no
 
+# Make predictions and preview results
 tqdm.pandas(desc = "Predicting: cultural persp.")
 articles[['prediction_cult','prediction_cult_prob_yes','prediction_cult_prob_no']] = articles['text'].progress_apply(lambda sentlist: pd.Series(compute_predictions([' '.join(sent) for sent in sentlist], cult_vec, cult_model)))
+print('Predictions for cultural perspective:\n', articles['prediction_cult'].value_counts())
 
 tqdm.pandas(desc = "Predicting: relational persp.")
 articles[['prediction_relt','prediction_relt_prob_yes','prediction_relt_prob_no']] = articles['text'].progress_apply(lambda sentlist: pd.Series(compute_predictions([' '.join(sent) for sent in sentlist], relt_vec, relt_model)))
+print('Predictions for relational perspective:\n', articles['prediction_relt'].value_counts())
 
 tqdm.pandas(desc = "Predicting: demographic persp.")
 articles[['prediction_demog','prediction_demog_prob_yes','prediction_demog_prob_no']] = articles['text'].progress_apply(lambda sentlist: pd.Series(compute_predictions([' '.join(sent) for sent in sentlist], demog_vec, demog_model)))
+print('Predictions for demographic perspective:\n', articles['prediction_demog'].value_counts())
 
 
 ###############################################
