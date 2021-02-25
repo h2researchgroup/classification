@@ -312,30 +312,30 @@ logging.info("Prepared data for modeling.")
 num_folds = 10 # number of random splits in k-fold cross-validation: uses (num_folds-1) for training, 1 for scoring
 kfold = StratifiedKFold(n_splits=num_folds, shuffle=True, random_state=seed) # initialize kfold
 
-def train_mlp_keras(X, 
-                    Y, 
-                    name):
+def train_model_keras(X, 
+                      Y, 
+                      name, 
+                      algorithm='mlp'):
     '''
-    Uses keras with droput layers to train MLP model for input data.
+    Uses keras with droput layers to train MLP model for input data. 
+    Uses k-fold CV with accuracy metric to evaluate model performance.
     Saves stats to log file and resulting model to disk.
     
     Args:
         X (binary arr): predictors 
         Y (binary arr): outcomes
         name (str): shortened name of perspective we are classifying, e.g. 'relt'
+        algorithm (str): whether CNN ('cnn') or MLP ('mlp'; default)
     '''
     
     # Take from global the model folder path, date variable, and random seed
     global model_fp, thisday, seed
-    
-    # Oversample to desirable ratio
-    logging.info('{} perspective: balancing data set for modeling...'.format(name))
-    X, Y = resample_data(
-        X, 
-        Y, 
-        undersample=undersample, 
-        sampling_ratio=sampling_ratio)
 
+    algorithm = algorithm.lower() # for consistency
+    if algorithm not in ['mlp', 'cnn']:
+        logging.error(f'{algorithm} is not an acceptable model type.')
+        return
+        
     X.sort_indices()
     # Y.sort_indices()
 
@@ -344,21 +344,37 @@ def train_mlp_keras(X,
 
     cvscores = []
 
-    logging.info('{} perspective: Training Multi-Layer Perceptron (MLP) model in Keras...'.format(name))
+    logging.info('{} perspective: Training {} model in Keras...'.format(name, algorithm))
     
     model = Sequential() # initialize model
     
     for train, test in kfold.split(X, Y):    
-        #add model layers
-        # inp = Input(shape=(len_input, 1))
-        model.add(Dense(32, input_dim=(len_input), activation='relu'))
-        model.add(Dropout(0.2))
-        model.add(Dense(16, activation='relu'))
-        model.add(Dropout(0.2))
-        model.add(Dense(1, activation='sigmoid'))
+        if algorithm=='mlp':
+            
+            #add model layers
+            model.add(Dense(32, input_dim=(len_input), activation='relu'))
+            model.add(Dropout(0.2))
+            model.add(Dense(16, activation='relu'))
+            model.add(Dropout(0.2))
+            model.add(Dense(1, activation='sigmoid'))
 
-        # compile the keras model
-        model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+            # compile model
+            model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+        
+        if algorithm=='cnn':
+            
+            #add model layers
+            inp = Input(shape=(len_input, 1))
+            conv32 = Conv1D(filters=64, kernel_size =10, activation='relu')(inp)
+            drop33 = Dropout(0.6)(conv32)
+            conv42 = Conv1D(filters=16, kernel_size =10, activation='relu')(drop33)
+            drop33 = Dropout(0.6)(conv32)
+            pool2 = Flatten()(conv42) # this is an option to pass from 3d to 2d
+            out = Dense(1, activation='softmax')(pool2) # the output dim must be equal to the num of class if u use softmax - binary
+            model = Model(inp, out)
+            
+            # compile model
+            model.compile(optimizer='adam', loss='mean_squared_error', metrics=['accuracy'])
         
         # fit the keras model on the dataset
         model.fit(X[train], Y[train], epochs=200, batch_size=10)
@@ -370,9 +386,9 @@ def train_mlp_keras(X,
     logging.info("%.2f%% (+/- %.2f%%)" % (np.mean(cvscores), np.std(cvscores)))
     logging.info(model.summary()) # Log model summary
 
-    model.save(model_fp + "{}_mlp_keras_{}".format(name, thisday)) # Save model
+    model.save(model_fp + "{}_{}_keras_{}".format(name, algorithm, thisday)) # Save model
                
-    logging.info('{} perspective: MLP model saved.'.format(name))
+    logging.info('{} perspective: {} model saved.'.format(name, algorithm))
     
     return
 
@@ -462,9 +478,7 @@ def train_mlp_sklearn(X,
     logging.info(f'MLP scoring:{mlp.score(X, Y)}')
     
     logging.info(f'{name} perspective: results of model evaluation via K-Fold CV (using sklearn)')
-    log_kfold_output(model=mlp,, 
-                     X=X,
-                     Y=Y)
+    log_kfold_output(model=mlp, X=X, Y=Y)
     
     # Save model
     joblib.dump(mlp, model_fp + "{}_mlp_sklearn_{}.joblib".format(name, thisday))
@@ -473,11 +487,14 @@ def train_mlp_sklearn(X,
     
     
 # Execute: Train MLP models
-for X, Y, name in input_array: # keras
-    train_mlp_keras(X, Y, name)
+for X, Y, name in input_array: # keras MLP
+    train_model_keras(X, Y, name, 'mlp')
     
-for X, Y, name in mlp_data: # sklearn    
+for X, Y, name in mlp_data: # sklearn MLP (optimized) 
     train_mlp_sklearn(X, Y, name)
+    
+for X, Y, name in mlp_data: # keras CNN    
+    train_model_keras(X, Y, name, 'cnn')
 
     
 sys.exit()
