@@ -65,10 +65,10 @@ article_list_fp = data_fp + 'filtered_length_index.csv' # Filtered index of rese
 article_paths_fp = data_fp + 'filtered_length_article_paths.csv' # List of article file paths
 
 # Labeled data
-training_cult_raw_fp = data_fp + 'training_cultural_raw_022221.pkl'
-training_relt_raw_fp = data_fp + 'training_relational_raw_022221.pkl'
-training_demog_raw_fp = data_fp + 'training_demographic_raw_022221.pkl'
-training_orgs_raw_fp = data_fp + 'training_orgs_raw_022121.pkl'
+training_cult_raw_fp = data_fp + 'training_cultural_raw_022421.pkl'
+training_relt_raw_fp = data_fp + 'training_relational_raw_022421.pkl'
+training_demog_raw_fp = data_fp + 'training_demographic_raw_022421.pkl'
+training_orgs_raw_fp = data_fp + 'training_orgs_raw_022421.pkl'
 
 # Vectorizers trained on hand-coded data (use to limit vocab of input texts)
 cult_vec_fp = model_fp + f'vectorizer_cult_{str(thisday)}.joblib'
@@ -304,7 +304,7 @@ def get_phrased(article, phrase_model):
 print("Detecting phrases in list of sentences...")
 
 # Add each sentence from each article to empty list, making long list of all sentences:
-sent_list = []; articles['text'].apply(lambda article: sent_list.append([sent for sent in article]))
+sent_list = []; articles['text'].apply(lambda article: sent_list.extend([sent for sent in article]))
 
 phrase_finder = Phrases(sent_list, min_count=10, delimiter=b'_', common_terms=jstor_stopwords, threshold=10) 
 
