@@ -19,40 +19,22 @@
 
 import pandas as pd
 import numpy as np
-import re
+import re, csv
 from collections import Counter
 from datetime import date
 from tqdm import tqdm
-import os, sys
-
-import nltk
-from nltk import word_tokenize
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
-nltk.download('punkt')
-
-stemmer = WordNetLemmatizer()
-
-from pandas.plotting import scatter_matrix
-import matplotlib.pyplot as plt
+import os, sys, logging
 
 import joblib
-import csv
-
-from sklearn.datasets import load_files
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
-
-from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.naive_bayes import MultinomialNB
-from sklearn.linear_model import LogisticRegression
-from sklearn.svm import SVC
-from sklearn.model_selection import cross_val_score, cross_val_predict, train_test_split, KFold
+from sklearn.model_selection import StratifiedKFold
 
 from imblearn.over_sampling import RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
+
+# For MLP model
+from keras.models import Sequential, Model
+from keras.layers import Dense, Conv1D, Flatten, Dropout, Input
 
 sys.path.insert(0, "../preprocess/") # For loading functions from files in other directory
 from quickpickle import quickpickle_dump, quickpickle_load # custom scripts for quick saving & loading to pickle format
@@ -63,28 +45,38 @@ from text_to_file import write_textlist, read_text # custom scripts for reading 
 # Define filepaths
 ######################################################
 
-thisday = date.today().strftime("%m%d%y")
-
 cwd = os.getcwd()
 root = str.replace(cwd, 'classification/modeling', '')
+thisday = date.today().strftime("%m%d%y")
 
 # Directory for prepared data and trained models: save files here
 data_fp = root + 'classification/data/'
 model_fp = root + 'classification/models/'
+logs_fp = model_fp + 'logs/'
+
+logging.basicConfig(
+    format='%(asctime)s - %(message)s', 
+    filename=logs_fp+'mlp_train_{}.log'.format(thisday), 
+    filemode='w', 
+    level=logging.INFO)
 
 # Current article lists
 article_list_fp = data_fp + 'filtered_length_index.csv' # Filtered index of research articles
 article_paths_fp = data_fp + 'filtered_length_article_paths.csv' # List of article file paths
 
 # Preprocessed training data
-cult_labeled_fp = data_fp + 'training_cultural_preprocessed_121620.pkl'
-relt_labeled_fp = data_fp + 'training_relational_preprocessed_121620.pkl'
-demog_labeled_fp = data_fp + 'training_demographic_preprocessed_121620.pkl'
+cult_labeled_fp = data_fp + 'training_cultural_preprocessed_022421.pkl'
+relt_labeled_fp = data_fp + 'training_relational_preprocessed_022421.pkl'
+demog_labeled_fp = data_fp + 'training_demographic_preprocessed_022421.pkl'
+orgs_labeled_fp = data_fp + 'training_orgs_preprocessed_022421.pkl'
 
 # Vectorizers trained on hand-coded data (use to limit vocab of input texts)
-cult_vec_fp = model_fp + 'vectorizer_cult_012521.joblib'
-relt_vec_fp = model_fp + 'vectorizer_relt_012521.joblib'
-demog_vec_fp = model_fp + 'vectorizer_demog_012521.joblib'
+cult_vec_fp = model_fp + 'vectorizer_cult_022421.joblib'
+relt_vec_fp = model_fp + 'vectorizer_relt_022421.joblib'
+demog_vec_fp = model_fp + 'vectorizer_demog_022421.joblib'
+orgs_vec_fp = model_fp + 'vectorizer_orgs_022421.joblib'
+
+logging.info("Initialized environment.")
 
 
 ######################################################
@@ -94,6 +86,7 @@ demog_vec_fp = model_fp + 'vectorizer_demog_012521.joblib'
 cult_df = quickpickle_load(cult_labeled_fp)
 relt_df = quickpickle_load(relt_labeled_fp)
 demog_df = quickpickle_load(demog_labeled_fp)
+orgs_df = quickpickle_load(orgs_labeled_fp)
 
 # Drop unsure cases: where X_score = 0.5
 drop_unsure = True
@@ -111,6 +104,10 @@ if drop_unsure:
     demog_df_no = demog_df[demog_df['demographic_score'] == 0.0]
     demog_df = pd.concat([demog_df_yes, demog_df_no])
     
+    orgs_df_yes = orgs_df[orgs_df['orgs_score'] == 1.0]
+    orgs_df_no = orgs_df[orgs_df['orgs_score'] == 0.0]
+    orgs_df = pd.concat([orgs_df_yes, orgs_df_no])
+
     
 def collect_article_tokens(article, return_string=False):
     '''
@@ -160,6 +157,15 @@ demog_df['text'].apply(
             article, 
             return_string=True)))
 
+orgs_docs = [] # empty list
+orgs_df['text'].apply(
+    lambda article: orgs_docs.append(
+        collect_article_tokens(
+            article, 
+            return_string=True)))
+
+logging.info("Loaded data sets.")
+
 
 ######################################################
 # Vectorize texts
@@ -171,39 +177,47 @@ jstor_stopwords = set(["a", "an", "and", "are", "as", "at", "be", "but", "by", "
 # Uses TFIDF weighted DTM because results in better classifier accuracy than unweighted
 cult_vectorizer = joblib.load(cult_vec_fp, "r+")
 X_cult = cult_vectorizer.transform(cult_docs)
-print('Number of features in cultural vectorizer:', len(cult_vectorizer.get_feature_names()))
-#print(cult_vectorizer.get_feature_names()[::1000]) # get every 1000th word
-#print()
+logging.info('Number of features in cultural vectorizer:', len(cult_vectorizer.get_feature_names()))
+logging.info('Every 1000th word:\n', cult_vectorizer.get_feature_names()[::1000]) # get every 1000th word
 
 relt_vectorizer = joblib.load(relt_vec_fp, "r+")
 X_relt = relt_vectorizer.transform(relt_docs)
-print('Number of features in relational vectorizer:', len(relt_vectorizer.get_feature_names()))
-#print(relt_vectorizer.get_feature_names()[::1000]) # get every 1000th word
-#print()
+logging.info('Number of features in relational vectorizer:', len(relt_vectorizer.get_feature_names()))
+logging.info('Every 1000th word:\n', relt_vectorizer.get_feature_names()[::1000]) # get every 1000th word
 
 demog_vectorizer = joblib.load(demog_vec_fp, "r+")
 X_demog = demog_vectorizer.transform(demog_docs)
-print('Number of features in demographic vectorizer:', len(demog_vectorizer.get_feature_names()))
-#print(demog_vectorizer.get_feature_names()[::1000]) # get every 1000th word
+logging.info('Number of features in demographic vectorizer:', len(demog_vectorizer.get_feature_names()))
+logging.info('Every 1000th word:\n', demog_vectorizer.get_feature_names()[::1000]) # get every 1000th word
+
+orgs_vectorizer = joblib.load(orgs_vec_fp, "r+")
+X_orgs = orgs_vectorizer.transform(orgs_docs)
+logging.info('Number of features in organizational soc vectorizer:', len(orgs_vectorizer.get_feature_names()))
+logging.info('Every 1000th word:\n', orgs_vectorizer.get_feature_names()[::1000]) # get every 1000th word
 
 
 # check out column order for data once vectorizer has been applied (should be exactly the same as list from previous cell)
 test = pd.DataFrame(X_cult.toarray(), columns=cult_vectorizer.get_feature_names())
-print('Number of features in preprocessed text for training cultural classifier (after applying cultural vectorizer):', len(list(test)))
-#print(list(test)[::1000])
-#print()
+logging.info('Number of features in preprocessed text for training cultural classifier (after applying cultural vectorizer):', len(list(test)))
+logging.info('Every 1000th word:\n', list(test)[::1000])
+
 test = pd.DataFrame(X_relt.toarray(), columns=relt_vectorizer.get_feature_names())
-print('Number of features in preprocessed text for training relational classifier (after applying relational vectorizer):', len(list(test)))
-#print(list(test)[::1000])
-#print()
+logging.info('Number of features in preprocessed text for training relational classifier (after applying relational vectorizer):', len(list(test)))
+logging.info('Every 1000th word:\n', list(test)[::1000])
+
 test = pd.DataFrame(X_demog.toarray(), columns=demog_vectorizer.get_feature_names())
-print('Number of features in preprocessed text for training demographic classifier (after applying demographic vectorizer):', len(list(test)))
-#print(list(test)[::1000])
-print()
+logging.info('Number of features in preprocessed text for training demographic classifier (after applying demographic vectorizer):', len(list(test)))
+logging.info('Every 1000th word:\n', list(test)[::1000])
+
+test = pd.DataFrame(X_orgs.toarray(), columns=orgs_vectorizer.get_feature_names())
+logging.info('Number of features in preprocessed text for training organizational soc classifier (after applying org-soc vectorizer):', len(list(test)))
+logging.info('Every 1000th word:\n', list(test)[::1000])
+
+logging.info("Vectorized predictors.")
 
 
 ######################################################
-# Prepare training and validation data
+# Prepare data
 ######################################################
 
 # Separate training and final validation data set. First remove class
@@ -211,51 +225,13 @@ print()
 # Then make the validation set 10% of the entire
 # set of labeled data (X_validate, Y_validate)
 
-cult_df = cult_df[['text', 'cultural_score']]
-print("Number of cases:", str(X_cult.shape[0]))
-
-valueArray = relt_df.values
-Y = valueArray[:,1]
-Y = Y.astype('float')
-print("Number of codes (should match):", str(len(Y)))
-
-test_size = 0.2
-seed = 3
-X_train, X_validate, Y_train, Y_validate = train_test_split(
-    X_relt, 
-    Y, 
-    test_size=test_size, 
-    random_state=seed)
-
-print(f'Y_train Distribution: {Counter(Y_train).most_common()}')
-
-from sklearn.decomposition import TruncatedSVD
-
-
-
-# svd = TruncatedSVD(n_components=1000, random_state=42)
-# svd.fit(X_train)
-# X_train = svd.transform(X_train)
-# X_validate = svd.transform(X_validate)
-
-X_train = np.array(X_train.todense())
-X_validate = np.array(X_validate.todense())
-Y_train = np.array(Y_train)
-Y_validate = np.array(Y_validate)
-
-
-# X_train = np.expand_dims(X_train, axis=2)
-# X_validate = np.expand_dims(X_validate, axis=2)
-
-
-
 def resample_data(X_train, Y_train, undersample = False, sampling_ratio = 1.0):
     """
-    Balance x_train, y_train
+    Balance x_train, y_train for better classifier training.
     
     Args:
-        X_train: X training data
-        Y_train: Y training data
+        X_train: predictors for classifier
+        Y_train: outcomes for classifier
         undersample: boolean for over or undersampling
         sampling_ratio: ratio of minority to majority class
         
@@ -276,68 +252,120 @@ def resample_data(X_train, Y_train, undersample = False, sampling_ratio = 1.0):
         oversample = RandomOverSampler(sampling_strategy=sampling_ratio)
         X_balanced, Y_balanced = oversample.fit_resample(X_train, Y_train)
     
-    print(f'Y_train: {Counter(Y_train)}\nY_resample: {Counter(Y_balanced)}')
+    logging.info(f'Y_train: {Counter(Y_train)}\nY_resample: {Counter(Y_balanced)}')
     
     return X_balanced, Y_balanced
 
-# Use these settings here and below
+#test_size = 0.2
+seed = 43 # for randomizing
 sampling_ratio = 1.0 # ratio of minority to majority cases
 undersample = False # whether to undersample or oversample
 
-# Oversample to desirable ratio
-X_balanced, Y_balanced = resample_data(
-    X_relt, 
-    Y, 
-    undersample=undersample, 
-    sampling_ratio=sampling_ratio)
+## Cultural
+cult_df = cult_df[['text', 'cultural_score']]
+logging.info("# cult cases:", str(X_cult.shape[0]))
+valueArray = cult_df.values
+Y_cult = valueArray[:,1]
+Y_cult = Y_cult.astype('float')
+logging.info("# cult codes (should match):", str(len(Y_cult)))
 
-# X_balanced = np.array(X_balanced.todense())
-# Y_balanced = np.array(Y_balanced.todense())
+## Relational
+relt_df = relt_df[['text', 'relational_score']]
+logging.info("# relt cases:", str(X_relt.shape[0]))
+valueArray = relt_df.values
+Y_relt = valueArray[:,1]
+Y_relt = Y_relt.astype('float')
+logging.info("# relt codes (should match):", str(len(Y_relt)))
+
+## Demographic
+demog_df = demog_df[['text', 'demographic_score']]
+logging.info("# demog cases:", str(X_demog.shape[0]))
+valueArray = demog_df.values
+Y_demog = valueArray[:,1]
+Y_demog = Y_demog.astype('float')
+logging.info("# cult codes (should match):", str(len(Y_demog)))
+
+logging.info("Prepared outcomes.")
 
 
 ######################################################
 # Build MLP
 ######################################################
 
-from keras.models import Sequential
-from keras.layers import Dense, Conv1D, Flatten
-from keras.layers import Dropout
-from keras.models import Model
-from keras.layers import Input
+kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=seed)
 
-X_balanced.sort_indices()
-# Y_balanced.sort_indices()
+def train_mlp(X, 
+              Y, 
+              name):
+    '''
+    Uses keras with droput layers to train MLP model for input data.
+    Saves stats to log file and resulting model to disk.
+    
+    Args:
+        X (binary arr): predictors 
+        Y (binary arr): outcomes
+        name (str): shortened name of perspective we are classifying, e.g. 'relt'
+    '''
+    
+    # Take from global the model folder path, date variable, and resampling settings
+    global model_fp, thisday, undersample, sampling_ratio 
+    
+    # Oversample to desirable ratio
+    logging.info('{} perspective: balancing data set for modeling...'.format(name))
+    X, Y = resample_data(
+        X, 
+        Y, 
+        undersample=undersample, 
+        sampling_ratio=sampling_ratio)
 
-n_sample = X_balanced.shape[0]
-len_input = X_balanced.shape[1]
+    X.sort_indices()
+    # Y.sort_indices()
 
-from sklearn.model_selection import StratifiedKFold
-kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=0)
-cvscores = []
-for train, test in kfold.split(X_balanced, Y_balanced):
-    #create model
-    model = Sequential()
-    #add model layers
-    # inp = Input(shape=(len_input, 1))
-    model.add(Dense(32, input_dim=(len_input), activation='relu'))
-    model.add(Dropout(0.2))
-    model.add(Dense(16, activation='relu'))
-    model.add(Dropout(0.2))
-    model.add(Dense(1, activation='sigmoid'))
-    # compile the keras model
-    model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
-    # fit the keras model on the dataset
-    model.fit(X_balanced[train], Y_balanced[train], epochs=200, batch_size=10)
-    scores = model.evaluate(X_balanced[test], Y_balanced[test], verbose=0)
-    print("%s: %.2f%%" % (model.metrics_names[1], scores[1]*100))
-    cvscores.append(scores[1] * 100)
-print("%.2f%% (+/- %.2f%%)" % (np.mean(cvscores), np.std(cvscores)))
+    n_sample = X.shape[0]
+    len_input = X.shape[1]
 
-#predicting probability
-y_pred = model.predict_proba(X_validate)
-#summary
-model.summary()
-#save model
-model.save("mlp_model")
+    cvscores = []
 
-# sys.close()
+    logging.info('{} perspective: Training Multi-Layer Perceptron (MLP) model in Keras and evaluating with K-Fold Cross-Validation...'.format(name))
+    
+    for train, test in kfold.split(X, Y):
+        #create model
+        model = Sequential()
+
+        #add model layers
+        # inp = Input(shape=(len_input, 1))
+        model.add(Dense(32, input_dim=(len_input), activation='relu'))
+        model.add(Dropout(0.2))
+        model.add(Dense(16, activation='relu'))
+        model.add(Dropout(0.2))
+        model.add(Dense(1, activation='sigmoid'))
+
+        # compile the keras model
+        model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+        
+        # fit the keras model on the dataset
+        model.fit(X[train], Y[train], epochs=200, batch_size=10)
+        scores = model.evaluate(X[test], Y[test], verbose=0)
+        logging.info("%s: %.2f%%" % (model.metrics_names[1], scores[1]*100))
+        cvscores.append(scores[1] * 100)
+
+    logging.info("%.2f%% (+/- %.2f%%)" % (np.mean(cvscores), np.std(cvscores))) # Log kfold CV scores
+    logging.info(model.summary()) # Log model summary
+
+    model.save(model_fp + "{}_mlp_{}".format(name, thisday)) # Save model
+               
+    logging.info('{} perspective: MLP model saved.'.format(name))
+    
+    return
+
+
+# Prepare data
+mlp_data = [(X_cult, Y_cult, "cult"), 
+            (X_relt, Y_relt, "relt"), 
+            (X_demog, Y_demog, "demog")]
+    
+# Execute: Train MLP models
+for X, Y, name in mlp_data:
+    train_mlp(X, Y, name)
+
+sys.close()
