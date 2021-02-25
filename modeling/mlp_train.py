@@ -12,11 +12,11 @@
 @description: Use preprocessed texts and TFIDF vectorizers to build Concurrent Neural Network (CNN) for classifying academic articles into perspectives on organizational theory (yes/no only).
 '''
 
-
 ######################################################
 # Import libraries
 ######################################################
 
+# General functions
 import pandas as pd
 import numpy as np
 import re, csv
@@ -25,18 +25,21 @@ from datetime import date
 from tqdm import tqdm
 import os, sys, logging
 
+# For sklearn vectorizers and data balancing
 import joblib
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
-from sklearn.model_selection import StratifiedKFold
-
 from imblearn.over_sampling import RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
 
-# For MLP model
+# For MLP modeling
+from sklearn.model_selection import StratifiedKFold, GridSearchCV, cross_val_score, cross_val_predict
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+from sklearn.neural_network import MLPClassifier
 from keras.models import Sequential, Model
 from keras.layers import Dense, Conv1D, Flatten, Dropout, Input
 
-sys.path.insert(0, "../preprocess/") # For loading functions from files in other directory
+# Custom pickle and text data functions
+sys.path.insert(0, "../preprocess/") # Pass in other directory to load functions
 from quickpickle import quickpickle_dump, quickpickle_load # custom scripts for quick saving & loading to pickle format
 from text_to_file import write_textlist, read_text # custom scripts for reading and writing text lists to .txt files
 
@@ -177,41 +180,41 @@ jstor_stopwords = set(["a", "an", "and", "are", "as", "at", "be", "but", "by", "
 # Uses TFIDF weighted DTM because results in better classifier accuracy than unweighted
 cult_vectorizer = joblib.load(cult_vec_fp, "r+")
 X_cult = cult_vectorizer.transform(cult_docs)
-logging.info('Number of features in cultural vectorizer:', len(cult_vectorizer.get_feature_names()))
-logging.info('Every 1000th word:\n', cult_vectorizer.get_feature_names()[::1000]) # get every 1000th word
+logging.info('Number of features in cultural vectorizer: {}'.format(len(cult_vectorizer.get_feature_names())))
+logging.info('Every 1000th word:\n{}'.format(cult_vectorizer.get_feature_names()[::1000])) # get every 1000th word
 
 relt_vectorizer = joblib.load(relt_vec_fp, "r+")
 X_relt = relt_vectorizer.transform(relt_docs)
-logging.info('Number of features in relational vectorizer:', len(relt_vectorizer.get_feature_names()))
-logging.info('Every 1000th word:\n', relt_vectorizer.get_feature_names()[::1000]) # get every 1000th word
+logging.info('Number of features in relational vectorizer: {}'.format(len(relt_vectorizer.get_feature_names())))
+logging.info('Every 1000th word:\n{}'.format(relt_vectorizer.get_feature_names()[::1000])) # get every 1000th word
 
 demog_vectorizer = joblib.load(demog_vec_fp, "r+")
 X_demog = demog_vectorizer.transform(demog_docs)
-logging.info('Number of features in demographic vectorizer:', len(demog_vectorizer.get_feature_names()))
-logging.info('Every 1000th word:\n', demog_vectorizer.get_feature_names()[::1000]) # get every 1000th word
+logging.info('Number of features in demographic vectorizer: {}'.format(len(demog_vectorizer.get_feature_names())))
+logging.info('Every 1000th word:\n{}'.format(demog_vectorizer.get_feature_names()[::1000])) # get every 1000th word
 
 orgs_vectorizer = joblib.load(orgs_vec_fp, "r+")
 X_orgs = orgs_vectorizer.transform(orgs_docs)
-logging.info('Number of features in organizational soc vectorizer:', len(orgs_vectorizer.get_feature_names()))
-logging.info('Every 1000th word:\n', orgs_vectorizer.get_feature_names()[::1000]) # get every 1000th word
+logging.info('Number of features in organizational soc vectorizer: {}'.format(len(orgs_vectorizer.get_feature_names())))
+logging.info('Every 1000th word:\n{}'.format(orgs_vectorizer.get_feature_names()[::1000])) # get every 1000th word
 
 
 # check out column order for data once vectorizer has been applied (should be exactly the same as list from previous cell)
 test = pd.DataFrame(X_cult.toarray(), columns=cult_vectorizer.get_feature_names())
-logging.info('Number of features in preprocessed text for training cultural classifier (after applying cultural vectorizer):', len(list(test)))
-logging.info('Every 1000th word:\n', list(test)[::1000])
+logging.info('Number of features in preprocessed text for training cultural classifier (after applying cultural vectorizer): {}'.format(len(list(test))))
+logging.info('Every 1000th word:\n{}'.format(list(test)[::1000]))
 
 test = pd.DataFrame(X_relt.toarray(), columns=relt_vectorizer.get_feature_names())
-logging.info('Number of features in preprocessed text for training relational classifier (after applying relational vectorizer):', len(list(test)))
-logging.info('Every 1000th word:\n', list(test)[::1000])
+logging.info('Number of features in preprocessed text for training relational classifier (after applying relational vectorizer): {}'.format(len(list(test))))
+logging.info('Every 1000th word:\n{}'.format(list(test)[::1000]))
 
 test = pd.DataFrame(X_demog.toarray(), columns=demog_vectorizer.get_feature_names())
-logging.info('Number of features in preprocessed text for training demographic classifier (after applying demographic vectorizer):', len(list(test)))
-logging.info('Every 1000th word:\n', list(test)[::1000])
+logging.info('Number of features in preprocessed text for training demographic classifier (after applying demographic vectorizer): {}'.format(len(list(test))))
+logging.info('Every 1000th word:\n{}'.format(list(test)[::1000]))
 
 test = pd.DataFrame(X_orgs.toarray(), columns=orgs_vectorizer.get_feature_names())
-logging.info('Number of features in preprocessed text for training organizational soc classifier (after applying org-soc vectorizer):', len(list(test)))
-logging.info('Every 1000th word:\n', list(test)[::1000])
+logging.info('Number of features in preprocessed text for training organizational soc classifier (after applying org-soc vectorizer): {}'.format(len(list(test))))
+logging.info('Every 1000th word:\n{}'.format(list(test)[::1000]))
 
 logging.info("Vectorized predictors.")
 
@@ -220,10 +223,9 @@ logging.info("Vectorized predictors.")
 # Prepare data
 ######################################################
 
-# Separate training and final validation data set. First remove class
-# label from data (X). Setup target class (Y)
-# Then make the validation set 10% of the entire
-# set of labeled data (X_validate, Y_validate)
+seed = 43 # for randomizing
+sampling_ratio = 1.0 # ratio of minority to majority cases
+undersample = False # whether to undersample or oversample
 
 def resample_data(X_train, Y_train, undersample = False, sampling_ratio = 1.0):
     """
@@ -252,51 +254,67 @@ def resample_data(X_train, Y_train, undersample = False, sampling_ratio = 1.0):
         oversample = RandomOverSampler(sampling_strategy=sampling_ratio)
         X_balanced, Y_balanced = oversample.fit_resample(X_train, Y_train)
     
-    logging.info(f'Y_train: {Counter(Y_train)}\nY_resample: {Counter(Y_balanced)}')
+    logging.info(f'Y_train: {Counter(Y_train)}, Y_resample: {Counter(Y_balanced)}')
     
     return X_balanced, Y_balanced
 
-#test_size = 0.2
-seed = 43 # for randomizing
-sampling_ratio = 1.0 # ratio of minority to majority cases
-undersample = False # whether to undersample or oversample
 
 ## Cultural
 cult_df = cult_df[['text', 'cultural_score']]
-logging.info("# cult cases:", str(X_cult.shape[0]))
-valueArray = cult_df.values
-Y_cult = valueArray[:,1]
-Y_cult = Y_cult.astype('float')
-logging.info("# cult codes (should match):", str(len(Y_cult)))
+logging.info("# cult cases: {}".format(str(X_cult.shape[0])))
+Y_cult = (cult_df.values)[:,1].astype('float')
+logging.info("# cult codes (should match): {}".format(str(len(Y_cult))))
+#logging.info('{} perspective: balancing data set for modeling...'.format(name))
+X_cult, Y_cult = resample_data(X_cult, Y_cult, 
+                               undersample=undersample, 
+                               sampling_ratio=sampling_ratio)
 
 ## Relational
 relt_df = relt_df[['text', 'relational_score']]
-logging.info("# relt cases:", str(X_relt.shape[0]))
-valueArray = relt_df.values
-Y_relt = valueArray[:,1]
-Y_relt = Y_relt.astype('float')
-logging.info("# relt codes (should match):", str(len(Y_relt)))
+logging.info("# relt cases: {}".format(str(X_relt.shape[0])))
+Y_relt = (relt_df.values)[:,1].astype('float')
+logging.info("# relt codes (should match): {}".format(str(len(Y_relt))))
+X_relt, Y_relt = resample_data(X_relt, Y_relt, 
+                               undersample=undersample, 
+                               sampling_ratio=sampling_ratio)
 
 ## Demographic
 demog_df = demog_df[['text', 'demographic_score']]
-logging.info("# demog cases:", str(X_demog.shape[0]))
-valueArray = demog_df.values
-Y_demog = valueArray[:,1]
-Y_demog = Y_demog.astype('float')
-logging.info("# cult codes (should match):", str(len(Y_demog)))
+logging.info("# demog cases: {}".format(str(X_demog.shape[0])))
+Y_demog = (demog_df.values)[:,1].astype('float')
+logging.info("# cult codes (should match): {}".format(str(len(Y_demog))))
+X_demog, Y_demog = resample_data(X_demog, Y_demog, 
+                               undersample=undersample, 
+                               sampling_ratio=sampling_ratio)
 
-logging.info("Prepared outcomes.")
+## Organizational Sociology
+orgs_df = orgs_df[['text', 'orgs_score']]
+logging.info("# org-soc cases: {}".format(str(X_orgs.shape[0])))
+Y_orgs = (orgs_df.values)[:,1].astype('float')
+logging.info("# soc codes (should match): {}".format(str(len(Y_orgs))))
+X_orgs, Y_orgs = resample_data(X_orgs, Y_orgs, 
+                               undersample=undersample, 
+                               sampling_ratio=sampling_ratio)
+
+# Assemble predictors and outcomes into array
+input_array = [(X_cult, Y_cult, "cult"), 
+               (X_relt, Y_relt, "relt"), 
+               (X_demog, Y_demog, "demog"), 
+               (X_orgs, Y_orgs, "orgs")]
+
+logging.info("Prepared data for modeling.")
 
 
 ######################################################
-# Build MLP
+# Train MLP models
 ######################################################
 
-kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=seed)
+num_folds = 10 # number of random splits in k-fold cross-validation: uses (num_folds-1) for training, 1 for scoring
+kfold = StratifiedKFold(n_splits=num_folds, shuffle=True, random_state=seed) # initialize kfold
 
-def train_mlp(X, 
-              Y, 
-              name):
+def train_mlp_keras(X, 
+                    Y, 
+                    name):
     '''
     Uses keras with droput layers to train MLP model for input data.
     Saves stats to log file and resulting model to disk.
@@ -307,8 +325,8 @@ def train_mlp(X,
         name (str): shortened name of perspective we are classifying, e.g. 'relt'
     '''
     
-    # Take from global the model folder path, date variable, and resampling settings
-    global model_fp, thisday, undersample, sampling_ratio 
+    # Take from global the model folder path, date variable, and random seed
+    global model_fp, thisday, seed
     
     # Oversample to desirable ratio
     logging.info('{} perspective: balancing data set for modeling...'.format(name))
@@ -326,12 +344,11 @@ def train_mlp(X,
 
     cvscores = []
 
-    logging.info('{} perspective: Training Multi-Layer Perceptron (MLP) model in Keras and evaluating with K-Fold Cross-Validation...'.format(name))
+    logging.info('{} perspective: Training Multi-Layer Perceptron (MLP) model in Keras...'.format(name))
     
-    for train, test in kfold.split(X, Y):
-        #create model
-        model = Sequential()
-
+    model = Sequential() # initialize model
+    
+    for train, test in kfold.split(X, Y):    
         #add model layers
         # inp = Input(shape=(len_input, 1))
         model.add(Dense(32, input_dim=(len_input), activation='relu'))
@@ -349,23 +366,118 @@ def train_mlp(X,
         logging.info("%s: %.2f%%" % (model.metrics_names[1], scores[1]*100))
         cvscores.append(scores[1] * 100)
 
-    logging.info("%.2f%% (+/- %.2f%%)" % (np.mean(cvscores), np.std(cvscores))) # Log kfold CV scores
+    logging.info(f'{name} perspective: results of model evaluation via K-Fold CV (using keras)')
+    logging.info("%.2f%% (+/- %.2f%%)" % (np.mean(cvscores), np.std(cvscores)))
     logging.info(model.summary()) # Log model summary
 
-    model.save(model_fp + "{}_mlp_{}".format(name, thisday)) # Save model
+    model.save(model_fp + "{}_mlp_keras_{}".format(name, thisday)) # Save model
                
     logging.info('{} perspective: MLP model saved.'.format(name))
     
     return
 
 
-# Prepare data
-mlp_data = [(X_cult, Y_cult, "cult"), 
-            (X_relt, Y_relt, "relt"), 
-            (X_demog, Y_demog, "demog")]
+def log_kfold_output(model,  
+                     X, 
+                     Y):
+    '''
+    Estimates the accuracy of model using k-fold CV and logs the accuracy results: averages and std.
+    Uses cross_val_predict, which unlike cross_val_score cannot define scoring option/evaluation metric.
+    
+    Args:
+        model (obj): classifier model
+        X (binary arr): predictors
+        Y (binary arr): outcomes
+        
+    Source: 
+        https://stackoverflow.com/questions/40057049/using-confusion-matrix-as-scoring-metric-in-cross-validation-in-scikit-learn
+    '''
+       
+    # Get kfold results
+    cv_results = cross_val_predict(
+        model.fit(X, Y), 
+        X, 
+        Y, 
+        cv=kfold, 
+        n_jobs=-1) # use all cores = faster
+        
+    # Log CV results
+    logging.info(f'Mean (std):\t {round(cv_results.mean(),4)} ({round(cv_results.std(),4)})')
+    logging.info(f'Accuracy:\t {round(accuracy_score(Y, cv_results)), 4}')
+    logging.info(f'Confusion matrix:\n{confusion_matrix(Y, cv_results)}')
+    logging.info(f'Report:\n{classification_report(Y, cv_results)}')
+        
+    return
+
+
+def train_mlp_sklearn(X, 
+                      Y, 
+                      name):
+    '''
+    Uses sklearn to train MLP model for input data.
+    Saves stats to log file and resulting model to disk.
+    
+    Args:
+        X (binary arr): predictors 
+        Y (binary arr): outcomes
+        name (str): shortened name of perspective we are classifying, e.g. 'relt'
+    '''
+    
+    # Take from global the model folder path, date variable, and random seed
+    global model_fp, thisday, seed
+
+    #X.sort_indices()
+    # Y.sort_indices()
+
+    #n_sample = X.shape[0]
+    #len_input = X.shape[1]
+
+    #cvscores = []
+
+    logging.info('{} perspective: Training Multi-Layer Perceptron (MLP) model in sklearn...'.format(name))
+    
+    mlp = MLPClassifier(max_iter=100, activation='relu') # initialize model
+    
+    # Set params for GridSearch optimization
+    parameter_space = {
+        'hidden_layer_sizes': [(50,50), (50,50,2), (50,), (100,100), (100,100,2), (100,)],
+        'solver': ['sgd', 'adam'],
+        'alpha': [0.0001, 0.001, 0.01, 0.05, 0.1],
+        'learning_rate': ['constant','adaptive'],
+    } 
+    
+    mlpgrid = GridSearchCV(mlp, parameter_space, n_jobs=-1, cv=3)
+    mlpgrid.fit(X, Y)
+    
+    logging.info('{} perspective: Best parameters found:\n{}'.format(name, mlpgrid.best_params_))
+
+    # Check out results
+    means, stds = mlpgrid.cv_results_['mean_test_score'], mlpgrid.cv_results_['std_test_score']
+    for mean, std, params in zip(means, stds, mlpgrid.cv_results_['params']):
+        logging.info("%0.3f (+/-%0.03f) for %r" % (mean, std * 2, params))
+    
+    # Create MLP model with optimized parameters
+    mlp = MLPClassifier(**mlpgrid.best_params_).fit(X, Y)
+
+    logging.info(f'MLP scoring:{mlp.score(X, Y)}')
+    
+    logging.info(f'{name} perspective: results of model evaluation via K-Fold CV (using sklearn)')
+    log_kfold_output(model=mlp,, 
+                     X=X,
+                     Y=Y)
+    
+    # Save model
+    joblib.dump(mlp, model_fp + "{}_mlp_sklearn_{}.joblib".format(name, thisday))
+    
+    return
+    
     
 # Execute: Train MLP models
-for X, Y, name in mlp_data:
-    train_mlp(X, Y, name)
+for X, Y, name in input_array: # keras
+    train_mlp_keras(X, Y, name)
+    
+for X, Y, name in mlp_data: # sklearn    
+    train_mlp_sklearn(X, Y, name)
 
-sys.close()
+    
+sys.exit()
