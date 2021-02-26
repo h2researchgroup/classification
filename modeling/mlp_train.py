@@ -35,6 +35,7 @@ from imblearn.under_sampling import RandomUnderSampler
 from sklearn.model_selection import StratifiedKFold, GridSearchCV, cross_val_score, cross_val_predict
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 from sklearn.neural_network import MLPClassifier
+from keras import backend
 from keras.models import Sequential, Model
 from keras.layers import Dense, Conv1D, Flatten, Dropout, Input
 
@@ -59,7 +60,7 @@ logs_fp = model_fp + 'logs/'
 
 logging.basicConfig(
     format='%(asctime)s - %(message)s', 
-    filename=logs_fp+'mlp_train_{}.log'.format(thisday), 
+    filename=logs_fp+'mlp_train_{}_all.log', #.format(thisday), 
     filemode='w', 
     level=logging.INFO)
 
@@ -180,25 +181,25 @@ jstor_stopwords = set(["a", "an", "and", "are", "as", "at", "be", "but", "by", "
 # Uses TFIDF weighted DTM because results in better classifier accuracy than unweighted
 cult_vectorizer = joblib.load(cult_vec_fp, "r+")
 X_cult = cult_vectorizer.transform(cult_docs)
-logging.info('Number of features in cultural vectorizer: {}'.format(len(cult_vectorizer.get_feature_names())))
-logging.info('Every 1000th word:\n{}'.format(cult_vectorizer.get_feature_names()[::1000])) # get every 1000th word
+#logging.info('Number of features in cultural vectorizer: {}'.format(len(cult_vectorizer.get_feature_names())))
+#logging.info('Every 1000th word:\n{}'.format(cult_vectorizer.get_feature_names()[::1000])) # get every 1000th word
 
 relt_vectorizer = joblib.load(relt_vec_fp, "r+")
 X_relt = relt_vectorizer.transform(relt_docs)
-logging.info('Number of features in relational vectorizer: {}'.format(len(relt_vectorizer.get_feature_names())))
-logging.info('Every 1000th word:\n{}'.format(relt_vectorizer.get_feature_names()[::1000])) # get every 1000th word
+#logging.info('Number of features in relational vectorizer: {}'.format(len(relt_vectorizer.get_feature_names())))
+#logging.info('Every 1000th word:\n{}'.format(relt_vectorizer.get_feature_names()[::1000])) # get every 1000th word
 
 demog_vectorizer = joblib.load(demog_vec_fp, "r+")
 X_demog = demog_vectorizer.transform(demog_docs)
-logging.info('Number of features in demographic vectorizer: {}'.format(len(demog_vectorizer.get_feature_names())))
-logging.info('Every 1000th word:\n{}'.format(demog_vectorizer.get_feature_names()[::1000])) # get every 1000th word
+#logging.info('Number of features in demographic vectorizer: {}'.format(len(demog_vectorizer.get_feature_names())))
+#logging.info('Every 1000th word:\n{}'.format(demog_vectorizer.get_feature_names()[::1000])) # get every 1000th word
 
 orgs_vectorizer = joblib.load(orgs_vec_fp, "r+")
 X_orgs = orgs_vectorizer.transform(orgs_docs)
-logging.info('Number of features in organizational soc vectorizer: {}'.format(len(orgs_vectorizer.get_feature_names())))
-logging.info('Every 1000th word:\n{}'.format(orgs_vectorizer.get_feature_names()[::1000])) # get every 1000th word
+#logging.info('Number of features in organizational soc vectorizer: {}'.format(len(orgs_vectorizer.get_feature_names())))
+#logging.info('Every 1000th word:\n{}'.format(orgs_vectorizer.get_feature_names()[::1000])) # get every 1000th word
 
-
+'''
 # check out column order for data once vectorizer has been applied (should be exactly the same as list from previous cell)
 test = pd.DataFrame(X_cult.toarray(), columns=cult_vectorizer.get_feature_names())
 logging.info('Number of features in preprocessed text for training cultural classifier (after applying cultural vectorizer): {}'.format(len(list(test))))
@@ -215,6 +216,7 @@ logging.info('Every 1000th word:\n{}'.format(list(test)[::1000]))
 test = pd.DataFrame(X_orgs.toarray(), columns=orgs_vectorizer.get_feature_names())
 logging.info('Number of features in preprocessed text for training organizational soc classifier (after applying org-soc vectorizer): {}'.format(len(list(test))))
 logging.info('Every 1000th word:\n{}'.format(list(test)[::1000]))
+'''
 
 logging.info("Vectorized predictors.")
 
@@ -331,8 +333,7 @@ def train_model_keras(X,
     # Take from global the model folder path, date variable, and random seed
     global model_fp, thisday, seed
 
-    algorithm = algorithm.lower() # for consistency
-    if algorithm not in ['mlp', 'cnn']:
+    if algorithm.lower() not in ['mlp', 'cnn']:
         logging.error(f'{algorithm} is not an acceptable model type.')
         return
         
@@ -346,9 +347,9 @@ def train_model_keras(X,
 
     logging.info('{} perspective: Training {} model in Keras...'.format(name, algorithm))
     
-    model = Sequential() # initialize model
-    
     for train, test in kfold.split(X, Y):    
+        model = Sequential() # initialize model
+        
         if algorithm=='mlp':
             
             #add model layers
@@ -381,14 +382,51 @@ def train_model_keras(X,
         scores = model.evaluate(X[test], Y[test], verbose=0)
         logging.info("%s: %.2f%%" % (model.metrics_names[1], scores[1]*100))
         cvscores.append(scores[1] * 100)
-
+        
+        logging.info(model.summary()) # Log model summary
+        
+        backend.clear_session() # clear model to avoid clutter
+    
     logging.info(f'{name} perspective: results of model evaluation via K-Fold CV (using keras)')
     logging.info("%.2f%% (+/- %.2f%%)" % (np.mean(cvscores), np.std(cvscores)))
+    
+    if algorithm=='mlp':
+            
+        #add model layers
+        model.add(Dense(32, input_dim=(len_input), activation='relu'))
+        model.add(Dropout(0.2))
+        model.add(Dense(16, activation='relu'))
+        model.add(Dropout(0.2))
+        model.add(Dense(1, activation='sigmoid'))
+        
+        # compile model
+        model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+        
+    if algorithm=='cnn':
+            
+        #add model layers
+        inp = Input(shape=(len_input, 1))
+        conv32 = Conv1D(filters=64, kernel_size =10, activation='relu')(inp)
+        drop33 = Dropout(0.6)(conv32)
+        conv42 = Conv1D(filters=16, kernel_size =10, activation='relu')(drop33)
+        drop33 = Dropout(0.6)(conv32)
+        pool2 = Flatten()(conv42) # this is an option to pass from 3d to 2d
+        out = Dense(1, activation='softmax')(pool2) # the output dim must be equal to the num of class if u use softmax - binary
+        model = Model(inp, out)
+            
+        # compile model
+        model.compile(optimizer='adam', loss='mean_squared_error', metrics=['accuracy'])
+        
+    # fit the keras model on the dataset
+    model.fit(X, Y, epochs=200, batch_size=10)
+    
     logging.info(model.summary()) # Log model summary
-
+    
     model.save(model_fp + "{}_{}_keras_{}".format(name, algorithm, thisday)) # Save model
                
     logging.info('{} perspective: {} model saved.'.format(name, algorithm))
+    
+    backend.clear_session() # clear models to avoid clutter
     
     return
 
@@ -451,7 +489,7 @@ def train_mlp_sklearn(X,
     #cvscores = []
 
     logging.info('{} perspective: Training Multi-Layer Perceptron (MLP) model in sklearn...'.format(name))
-    
+    '''
     mlp = MLPClassifier(max_iter=100, activation='relu') # initialize model
     
     # Set params for GridSearch optimization
@@ -473,7 +511,11 @@ def train_mlp_sklearn(X,
         logging.info("%0.3f (+/-%0.03f) for %r" % (mean, std * 2, params))
     
     # Create MLP model with optimized parameters
-    mlp = MLPClassifier(**mlpgrid.best_params_).fit(X, Y)
+    mlp = MLPClassifier(**mlpgrid.best_params_).fit(X, Y)'''
+    
+    mlp = MLPClassifier(random_state=seed, max_iter=200, activation='relu', 
+                        alpha=0.0001, hidden_layer_sizes=(50, 50), 
+                        learning_rate='adaptive', solver='adam').fit(X, Y)
 
     logging.info(f'MLP scoring:{mlp.score(X, Y)}')
     
@@ -490,10 +532,10 @@ def train_mlp_sklearn(X,
 for X, Y, name in input_array: # keras MLP
     train_model_keras(X, Y, name, 'mlp')
     
-for X, Y, name in mlp_data: # sklearn MLP (optimized) 
-    train_mlp_sklearn(X, Y, name)
+#for X, Y, name in input_array: # sklearn MLP (optimized) 
+#    train_mlp_sklearn(X, Y, name)
     
-for X, Y, name in mlp_data: # keras CNN    
+for X, Y, name in input_array: # keras CNN    
     train_model_keras(X, Y, name, 'cnn')
 
     
