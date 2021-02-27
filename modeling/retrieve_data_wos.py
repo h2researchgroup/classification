@@ -25,7 +25,6 @@ import pandas as pd
 import re, csv, os
 from datetime import date
 from tqdm import tqdm
-#from fuzzywuzzy import fuzz, process
 import time, logging
 from time import sleep
 import random
@@ -45,9 +44,17 @@ import woslite_client
 from woslite_client.rest import ApiException
 from pprint import pprint
 
-# Configure API key authorization: key
+def load_api_key(path):
+    '''
+    Loads text from file containing API key.
+    '''
+    with open(path, 'r') as f:
+        for line in f:
+            return line.strip()
+        
+# Configure API key authorization
 configuration = woslite_client.Configuration()
-configuration.api_key['X-ApiKey'] = '9f393dd2ff6166b38de7568d039ab12d51a5c726'
+configuration.api_key['X-ApiKey'] = load_api_key('wos_api_key.txt')
 
 # Create an instance of the API class
 integration_api_instance = woslite_client.IntegrationApi(woslite_client.ApiClient(configuration))
@@ -123,24 +130,26 @@ df = pd.merge(df, df_pred, how='right', on='file_name') # predictions
 # Call API
 ######################################################
 
-def get_year_wos(title):
+def get_year_wos(row):
     '''
     Gets publication year for article using title, using the Scholarly API (which uses Google Scholar). 
     
     Docs: https://github.com/Clarivate-SAR/woslite_py_client
     
     Args:
-        title (str): full title, e.g., 'The Collective Strategy Framework: An Application to Competing Predictions of Isomorphism'
+        row (Series): first element is full title, e.g., 'The Collective Strategy Framework: An Application to Competing Predictions of Isomorphism'; second element is journal title
         
     Returns:
         pub_year (int): year article was published, in four digits (i.e., `19xx` or `20xx`)
     '''
     
-    sleeptime = random.randint(5000,7000)/1000  # set random pause for politeness/to avoid getting blocked by API
+    sleeptime = 2 #random.randint(5000,7000)/1000  # set random pause for politeness/to avoid getting blocked by API
+    title = row[0]
+    journal = row[1]
     
     # Configure query
     title = title.replace("'", "") # remove apostrophes (confuses parser)
-    usr_query = f"TS=({title})" # str | User query for requesting data, ex: TS=(cadmium). The query parser will return errors for invalid queries.
+    usr_query = f"TI=({title}) AND SO=({journal})" # str | User query for requesting data, ex: TS=(cadmium). The query parser will return errors for invalid queries.
     count = 1  # int | Number of records returned in the request
     first_record = 1  # int | Specific record, if any within the result set to return. Cannot be less than 1 and greater than 100000.
     lang = 'en'  # str | Language of search. This element can take only one value: en for English. If no language is specified, English is passed by default. (optional)
@@ -154,16 +163,16 @@ def get_year_wos(title):
         # Get fields of interest from API response
         pub_year = api_response.data[0].source.published_biblio_year[0]
         pub_title = api_response.data[0].title.title[0]
-        logging.info(f'API record found for: \t\t"{pub_title}"')
-        logging.info(f'JSTOR Title: \t\t\t"{title}"')
+        logging.info(f'API record found for: \t"{pub_title}"')
+        logging.info(f'JSTOR Title for above:\t"{title}"')
         
-        sleep(4)
+        sleep(sleeptime)
         return pub_year, pub_title
         
     except Exception as e:
-        logging.info("API failed to with error: \t%s" % e)
+        logging.info("API failed with error: \t%s" % e)
     
-    sleep(4)
+    sleep(sleeptime)
     return
 
 
@@ -172,7 +181,10 @@ df['year'].rename(columns={"year":"year_jstor"}, inplace=True) # rename 'year' c
 df['article_name'].rename(columns={"article_name":"article_name_jstor"}, inplace=True) # rename 'year' column to differentiate
 
 tqdm.pandas(desc='API -> year...')
-df['year_wos'], df['article_name_wos'] = df[df['article_name'].notnull()]['article_name'].progress_apply(lambda title: get_year_wos(title))
+df = df[df['article_name'].notnull()]
+df = df[df['journal_title'].notnull()].reset_index(drop=True)
+df['year_wos'], df['article_name_wos'] = df[['article_name', 'journal_title']].progress_apply(lambda row: get_year_wos(row), axis=1)
+#[['article_name','journal_title']]
 
 # Set file path for output
 thisday = date.today().strftime("%m%d%y") # update
