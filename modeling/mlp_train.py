@@ -68,17 +68,17 @@ logging.basicConfig(
 article_list_fp = data_fp + 'filtered_length_index.csv' # Filtered index of research articles
 article_paths_fp = data_fp + 'filtered_length_article_paths.csv' # List of article file paths
 
-# Preprocessed training data
-cult_labeled_fp = data_fp + 'training_cultural_preprocessed_022421.pkl'
-relt_labeled_fp = data_fp + 'training_relational_preprocessed_022421.pkl'
-demog_labeled_fp = data_fp + 'training_demographic_preprocessed_022421.pkl'
-orgs_labeled_fp = data_fp + 'training_orgs_preprocessed_022421.pkl'
+# Preprocessed training data: phrased version (unphrased version was 022421)
+cult_labeled_fp = data_fp + 'training_cultural_preprocessed_022621.pkl'
+relt_labeled_fp = data_fp + 'training_relational_preprocessed_022621.pkl'
+demog_labeled_fp = data_fp + 'training_demographic_preprocessed_022621.pkl'
+orgs_labeled_fp = data_fp + 'training_orgs_preprocessed_022621.pkl'
 
-# Vectorizers trained on hand-coded data (use to limit vocab of input texts)
-cult_vec_fp = model_fp + 'vectorizer_cult_022421.joblib'
-relt_vec_fp = model_fp + 'vectorizer_relt_022421.joblib'
-demog_vec_fp = model_fp + 'vectorizer_demog_022421.joblib'
-orgs_vec_fp = model_fp + 'vectorizer_orgs_022421.joblib'
+# Vectorizers trained on hand-coded data (use to limit vocab of input texts): phrased version (unphrased version was 022421)
+cult_vec_fp = model_fp + 'vectorizer_cult_022621.joblib'
+relt_vec_fp = model_fp + 'vectorizer_relt_022621.joblib'
+demog_vec_fp = model_fp + 'vectorizer_demog_022621.joblib'
+orgs_vec_fp = model_fp + 'vectorizer_orgs_022621.joblib'
 
 logging.info("Initialized environment.")
 
@@ -344,7 +344,7 @@ def train_model_keras(X,
     if algorithm=='cnn':
         X = np.array(X.todense())
         Y = np.array(Y)
-        X = np.expand_dims(X_train, axis=2)
+        X = np.expand_dims(X, axis=2)
 
     n_sample = X.shape[0]
     len_input = X.shape[1]
@@ -385,7 +385,7 @@ def train_model_keras(X,
                 model.compile(optimizer='adam', loss='mean_squared_error', metrics=['accuracy'])
 
             # fit the keras model on the dataset
-            model.fit(X[train], Y[train], epochs=200, batch_size=10)
+            model.fit(X[train], Y[train], epochs=50, batch_size=32)
             scores = model.evaluate(X[test], Y[test], verbose=0)
             logging.info("%s: %.2f%%" % (model.metrics_names[1], scores[1]*100))
             cvscores.append(scores[1] * 100)
@@ -427,9 +427,13 @@ def train_model_keras(X,
         model.compile(optimizer='adam', loss='mean_squared_error', metrics=['accuracy'])
         
     # fit the keras model on the dataset
-    model.fit(X, Y, epochs=200, batch_size=10)
+    model.fit(X, Y, epochs=50, batch_size=32)
     
-    logging.info(model.summary(line_length=80, print_fn=lambda x: fh.write(x + '\n'))) # Log model summary
+    # Log short model summary
+    sum_strlist = []; model.summary(line_length=80, print_fn=lambda x: sum_strlist.append(x)) # Add each line to list of str
+    logging.info("\n".join(sum_strlist)) # Join the list as one str, then log
+    
+    #model.summary(line_length=80, print_fn=logger.info) # Log model summary
     
     model.save(model_fp + "{}_{}_keras_{}".format(name, algorithm, thisday)) # Save model
                
@@ -540,14 +544,16 @@ def train_mlp_sklearn(X,
     
     
 # Execute: Train MLP models
-#for X, Y, name in input_array: # keras MLP
-#    train_model_keras(X, Y, name, 'mlp', evaluate=True)
-    
-#for X, Y, name in input_array: # sklearn MLP (optimized) 
-#    train_mlp_sklearn(X, Y, name, evaluate=True)
+eval_setting = True # whether to evaluate models using kfold CV (takes time)
+
+for X, Y, name in input_array: # sklearn MLP (optimized) 
+    train_mlp_sklearn(X, Y, name, evaluate=eval_setting)
+
+for X, Y, name in input_array: # keras MLP
+    train_model_keras(X, Y, name, 'mlp', evaluate=eval_setting)
     
 for X, Y, name in input_array: # keras CNN    
-    train_model_keras(X, Y, name, 'cnn', evaluate=True)
+    train_model_keras(X, Y, name, 'cnn', evaluate=eval_setting)
 
     
 sys.exit()
