@@ -143,7 +143,7 @@ def get_year_wos(row):
         pub_year (int): year article was published, in four digits (i.e., `19xx` or `20xx`)
     '''
     
-    sleeptime = 2 #random.randint(5000,7000)/1000  # set random pause for politeness/to avoid getting blocked by API
+    sleeptime = 1 #random.randint(5000,7000)/1000  # set random pause for politeness/to avoid getting blocked by API
     title = row[0]
     journal = row[1]
     
@@ -183,7 +183,10 @@ df['article_name'].rename(columns={"article_name":"article_name_jstor"}, inplace
 tqdm.pandas(desc='API -> year...')
 df = df[df['article_name'].notnull()]
 df = df[df['journal_title'].notnull()].reset_index(drop=True)
-df['year_wos'], df['article_name_wos'] = df[['article_name', 'journal_title']].progress_apply(lambda row: get_year_wos(row), axis=1)
+try:
+    df['year_wos'], df['article_name_wos'] = df[['article_name', 'journal_title']].progress_apply(lambda row: get_year_wos(row), axis=1)
+except ValueError as e: 
+    logging.info(f'Encountered error: {e}')
 #[['article_name','journal_title']]
 
 # Set file path for output
@@ -191,6 +194,6 @@ thisday = date.today().strftime("%m%d%y") # update
 wos_fp = data_fp + f'merged_wos_{thisday}.csv'
 
 # Save merged data with year, title, match from WOS
-df.to_csv(wos_path, index=False)
+df.to_csv(wos_fp, index=False)
 
 sys.exit()
