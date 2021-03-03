@@ -10,22 +10,20 @@ from __future__ import print_function
 @project: Computational Literature Review of Organizational Scholarship
 @repo: https://github.com/h2researchgroup/classification/
 @date: February 2020
-@description: Use preprocessed texts and TFIDF vectorizers to build Concurrent Neural Network (CNN) for classifying academic articles into perspectives on organizational theory (yes/no only).
+@description: 
 '''
 
 ######################################################
 # Import libraries
 ######################################################
 
-######################################################
-# Import libraries
-######################################################
-
 import pandas as pd
+import numpy as np
 import re, csv, os
 from datetime import date
 from tqdm import tqdm
 import time, logging
+from fuzzywuzzy.fuzz import ratio, partial_ratio # for comparing titles
 from time import sleep
 import random
 random.seed(43)
@@ -96,7 +94,7 @@ meta_fp = root + 'dictionary_methods/code/metadata_combined.h5'
 
 
 ######################################################
-# Load & merge data
+# Load & prepare data
 ######################################################
 
 # Read in metadata file
@@ -105,7 +103,7 @@ df_meta.reset_index(drop=False, inplace=True) # extract file name from index
 
 # For merging purposes, get ID alone from file name, e.g. 'journal-article-10.2307_2065002' -> '10.2307_2065002'
 df_meta['edited_filename'] = df_meta['file_name'].apply(lambda x: x[16:]) 
-df_meta = df_meta[["edited_filename", "article_name", "jstor_url", "abstract", "journal_title", "given_names", "primary_subject", "year", "type"]] # keep only relevant columns
+df_meta = df_meta[["edited_filename", "article_name", "jstor_url", "abstract", "journal_title", "primary_subject", "year"]] # keep only relevant columns
 
 df_pred = quickpickle_load(predicted_fp)
 
@@ -125,12 +123,19 @@ df_pred['file_name'] = df_pred['file_name'].str.replace(
 df = pd.merge(df, df_meta, how='left', on='edited_filename') # meta data
 df = pd.merge(df, df_pred, how='right', on='file_name') # predictions
 
+# Rename columns, add new ones for WOS output
+df.rename(columns={"year":"year_jstor", "article_name":"article_name_jstor"}, inplace=True) # Differentiate columns from incoming WOS cols
+df = df[df['article_name_jstor'].notnull()] # remove any articles without titles
+df = df[df['journal_title'].notnull()].reset_index(drop=True) # ditto for journal names (can't search these)
+df = df.reindex(columns = df.columns.tolist() + ['year_wos', 'article_name_wos', 'similarity_wos_title']) # add new columns
+
 
 ######################################################
 # Call API
 ######################################################
 
-def get_year_wos(row):
+def get_year_wos(row): 
+
     '''
     Gets publication year for article using title, using the Scholarly API (which uses Google Scholar). 
     
@@ -143,9 +148,9 @@ def get_year_wos(row):
         pub_year (int): year article was published, in four digits (i.e., `19xx` or `20xx`)
     '''
     
-    sleeptime = 1 #random.randint(5000,7000)/1000  # set random pause for politeness/to avoid getting blocked by API
-    title = row[0]
-    journal = row[1]
+    sleeptime = 1 #random.randint(5000,7000)/1000  # set pause for politeness/to avoid getting blocked by API
+    title = row[0] # get title #title_col
+    journal = row[1] # get journal #journal_col
     
     # Configure query
     title = title.replace("'", "") # remove apostrophes (confuses parser)
@@ -160,34 +165,31 @@ def get_year_wos(row):
         api_response = search_api_instance.root_get(database_id, usr_query, count, first_record, lang=lang,
                                                                  sort_field=sort_field)
         
-        # Get fields of interest from API response
+        # Get fields of interest from API response, assign to row
         pub_year = api_response.data[0].source.published_biblio_year[0]
         pub_title = api_response.data[0].title.title[0]
-        logging.info(f'API record found for: \t"{pub_title}"')
-        logging.info(f'JSTOR Title for above:\t"{title}"')
+        similarity = ratio(title.lower(), pub_title.lower()) # compare titles
         
-        sleep(sleeptime)
-        return pub_year, pub_title
+        logging.info(f'API record found for: \t"{pub_title}"') # log results
+        logging.info(f'JSTOR Title for above:\t"{title}"')
+        sleep(sleeptime) # pause
+        
+        return pd.Series([pub_year, pub_title, similarity])
         
     except Exception as e:
         logging.info("API failed with error: \t%s" % e)
-    
-    sleep(sleeptime)
-    return
+        sleep(sleeptime) # pause
+        
+        return pd.Series([np.NaN, np.NaN, np.NaN])
 
 
 # Execute
-df['year'].rename(columns={"year":"year_jstor"}, inplace=True) # rename 'year' column to differentiate
-df['article_name'].rename(columns={"article_name":"article_name_jstor"}, inplace=True) # rename 'year' column to differentiate
-
 tqdm.pandas(desc='API -> year...')
-df = df[df['article_name'].notnull()]
-df = df[df['journal_title'].notnull()].reset_index(drop=True)
+
 try:
-    df['year_wos'], df['article_name_wos'] = df[['article_name', 'journal_title']].progress_apply(lambda row: get_year_wos(row), axis=1)
+    df[['year_wos', 'article_name_wos', 'similarity_wos_title']] = df[['article_name_jstor', 'journal_title']].progress_apply(get_year_wos, axis=1)
 except ValueError as e: 
     logging.info(f'Encountered error: {e}')
-#[['article_name','journal_title']]
 
 # Set file path for output
 thisday = date.today().strftime("%m%d%y") # update
