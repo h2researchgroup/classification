@@ -214,8 +214,16 @@ def clean_sentence_apache(sentence,
         
     # Remove same stopwords as JSTOR, also junk formatting words
     if remove_stopwords:
-        junk_words = ["colwidth", "colname", "char", "rowsep", "colsep", 
-                      "oasis", "pp", "fn", "sec", "pi", "sc", "id"] # define junk/formatting terms to avoid
+        junk_words = ['colwidth', 'colname', 'char', 'rowsep', 'colsep', 
+                      'oasis', 'pp', 'fn', 'sec', 'pi', 'sc', 'id', 
+                      'cyr', 'extcyr', 'caption', 'newcommand', 
+                      'normalfont', 'selectfont', 'documentclass', 'aastex', 
+                      'declaremathsizes', 'declaretextfontcommand', 
+                      'pagestyle', 'xlink:type', 'sub', 'sup', 'nameend', 'pgwide', 
+                      'tbody', 'tgroup', 'sup', 'tbfna', 'morerows', 
+                      'xlink:href', 'fg.tiff', 'tb.eps', 'df.eps', 'χ', 
+                      'xmlns:oasis', 'dtd', 'drd', 'xmlns:oasis', 'http', 
+                      'docs.oasis', 'open.org ns'] # define junk/formatting terms to avoid
         stop_words = set(list(jstor_stop_words) + junk_words) # simplest way to avoid stopwords and formatting words: combine them!
         
         sent_list = [word for word in sent_list if 
@@ -226,10 +234,38 @@ def clean_sentence_apache(sentence,
     blacklist_sents = ['valign bottom oasis entry oasis entry colname colsep rowsep align char char', 
                        'oasis entry oasis entry colname colsep rowsep align char char', 
                        'oasis entry colname colsep rowsep align char char', 
-                  'valign bottom oasis entry colname colsep rowsep align char char', 
+                       'valign bottom oasis entry colname colsep rowsep align char char', 
                        'colsep rowsep oasis entry align char char', 
                        'oasis entry oasis entry colsep rowsep align char char', 
-                       'colsep rowsep oasis entry oasis entry align char char']
+                       'colsep rowsep oasis entry oasis entry align char char', 
+                       'bottom entry', 'align center', 'align left', 
+                       'colspec colnum', 'usepackage amsbsy', 'usepackage amsfonts', 
+                       'usepackage amssymb', 'usepackage bm', 
+                       'usepackage mathrsfs', 'usepackage pifont', 
+                       'usepackage stmaryrd', 'usepackage textcomp', 
+                       'position float', 'alt version', 'mimetype image', 
+                       'italic italic', 'italic ij', 'begin document', 
+                       'inline formula', 'entry namest', 'frame topbot', 
+                       'orient port', 'list item', 'table wrap', 'tbody top', 
+                       'disp formula', 'fig group', 'top entry', 
+                       'tex math notation latex', 'usepackage amsmath amsxtra', 
+                       'usepackage ot ot fontenc', 'renewcommand rmdefault wncyr', 
+                       'renewcommand sfdefault wncyss', 'renewcommand encodingdefault ot', 
+                       'end document tex math', 'entry align entry', 'entry align left top', 
+                       'align right', 'table wrap foot', 'top break entry', 
+                       'table xml exchange table model en', 
+                       'exchange table', 'label table label', 'tgroup cols align left', 
+                       'disp formula df', 'entry align left top entry', 
+                       'fig position float fig type figure', 'fig group', 'graphic ', 
+                       'bottom yes entry', 'bottom model entry', 'bottom sd entry', 
+                       'entry align left top italic df  italic lt entry',
+                       'graphic tb eps', 'bottom mean entry', 
+                       'bottom mse entry', 'bottom total entry', 
+                       'italic df italic two tailed entry', 'label fig label', 
+                       'bottom configuration sets entry', 'bottom continuation rate entry', 
+                       'bottom continuation rate other configurations entry', 
+                       'italic white boys risk italic', 
+                       'bottom italic df italic entry']
     if sent_list in blacklist_sents:
         return('')
         
