@@ -22,6 +22,7 @@
     <li><a href="#data-and-data-processing">Data And Data Processing</a></li>
     <li><a href="#model-training">Model Training</a></li>
     <li><a href="#analysis">Analysis</a></li>
+    <li><a href="#important-files">Important Files</a></li>
     <li><a href="#acknowledgments">Acknowledgments</a></li>
   </ol>
 </details>
@@ -76,6 +77,43 @@ We also explored correlations between predictions for each category of articles.
 <p align="right">(<a href="#top">back to top</a>)</p>
 
 
+<!-- Important Files -->
+## Important Files
+
+#### Transformer Based Approaches
+Scripts to train a Longformer Model on Azure:
+* modeling/Azure Files/Longformer-CV.py 
+* modeling/Azure Files/run.ipynb
+
+Notebooks to interactively train a BERT Model:
+* modeling/BERT-cross-validate.ipynb
+
+Notebook to label all 65k unlabeled articles using a Longformer model:
+* modeling/Longformer-Labeling.ipynb
+
+Changes to text preprocessing code (because transformers can utilize stop words)
+* preprocess/preprocess_article_text_full.py
+* preprocess/textprocess.ipynb
+
+#### Other Approaches
+Code running grid search and evaluating metrics
+* modeling/classifier_gridsearch.ipynb
+* modeling/evaluate_basic_classifiers_balanced.ipynb
+
+Notebook creating a csv of our file names
+* modeling/grab filenames.ipynb
+
+Notebooks Running other Deep Learning algorithms on our data utilizing word embeddings
+* modeling/word_embedding_classification_cnn.ipynb
+* modeling/word_embedding_classification_mean.ipynb
+
+CSV Logs of model hyperparameter and results for each perspective using the average word embedding as feature vector
+* modeling/logs/ave_embed_cultural_grid_092621.csv
+* modeling/logs/ave_embed_demographic_grid_092621.csv
+* modeling/logs/ave_embed_orgs_grid_092621.csv
+* modeling/logs/ave_embed_relational_grid_092621.csv
+
+<p align="right">(<a href="#top">back to top</a>)</p>
 
 <!-- ACKNOWLEDGMENTS -->
 ## Acknowledgments
