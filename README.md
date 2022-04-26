@@ -112,9 +112,9 @@ We have about 700 training data for each perspective, and have about twice as mu
 We first ran the models over ~65K unlabeled JSTOR articles from 1970 to 2016 to obtain the predicted probability that each article is of the 4 perspectives. Then to start our analysis, we divided the articles into 2 primary subjects: Sociology and Management & Organizational Behavior, each having 3 perspectives (demographic, cultural, and relational). Sociology articles are filtered to be organizational sociology, where the predicted organizational score is greater than a threshold of 0.7. 
 
 To analyze trends in various perspectives, we calculated the proportion of articles belonging to a certain perspective and primary subject and obtained the line graph above. The year 1970 and 2016 are outliers because both only contain less than 15 articles, resulting in the sharp fluctuations in some perspectives in 1970 and 2016. 
-![Sociological Trends](https://github.com/h2researchgroup/classification/blob/classifier-metrics/figures/SOCTrends_Longformer_Dec2021.png?raw=true)
+![Sociological Trends](https://github.com/h2researchgroup/classification/blob/figures/SOCTrends_Longformer_Dec2021.png?raw=true)
 
-![Management Trends](https://github.com/h2researchgroup/classification/blob/classifier-metrics/figures/MGTTrends_Longformer_Dec2021.png?raw=true)
+![Management Trends](https://github.com/h2researchgroup/classification/blob/figures/MGTTrends_Longformer_Dec2021.png?raw=true)
 
 Overall, we see that demographic perspective is the most common in sociology articles, while relational perspective is the most common in management & OB articles. Demographic management articles seems to be in gradual decline starting in 2010, and cultural management articles seems to be in gradual growth starting in 1970. All other categories seem to have fluctuations over the years but exhibit no general growth nor decline from 1970 to 2016.
 
