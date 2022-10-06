@@ -9,7 +9,7 @@
 @project: Computational Literature Review of Organizational Scholarship
 @repo: https://github.com/h2researchgroup/classification/
 @date: December 7, 2020
-@description: General script for preprocessing JSTOR article data. As of now does three things: Preprocesses article data for classifier training purposes; preprocesses ALL filtered article data for future sample selection; and creates vectorizers for training each classifier. Saves the preprocessed data (labeled and full) and vectorizers to disk. 
+@description: The difference between this script and the other is that this script  General script for preprocessing JSTOR article data. As of now does three things: Preprocesses article data for classifier training purposes; preprocesses ALL filtered article data for future sample selection; and creates vectorizers for training each classifier. Saves the preprocessed data (labeled and full) and vectorizers to disk. 
 '''
 
 
@@ -208,7 +208,7 @@ def preprocess_text(article,
                 #sent = clean_sent(sent)
                 sent = [word for word in clean_sentence_apache(sent, 
                                                                unhyphenate=True, 
-                                                               remove_numbers=True, 
+                                                               remove_numbers=False, 
                                                                remove_acronyms=False, 
                                                                remove_stopwords=False, 
                                                                remove_propernouns=False, 
@@ -230,7 +230,7 @@ def preprocess_text(article,
             #sent = clean_sent(sent)
             sent = [word for word in clean_sentence_apache(sent, 
                                                            unhyphenate=True, 
-                                                           remove_numbers=True, 
+                                                           remove_numbers=False, 
                                                            remove_acronyms=False, 
                                                            remove_stopwords=False, 
                                                            remove_propernouns=False, 
@@ -241,6 +241,38 @@ def preprocess_text(article,
 
     return doc
 
+tqdm.pandas(desc='Cleaning labeled text files...')
+coded_cult['text'] = coded_cult['text'].progress_apply(
+    lambda text: preprocess_text(text, 
+                                 shorten = False))
+                                 #longest = 75000, 
+                                 #shortest = 1000, 
+                                 #maxlen = 1000, 
+                                 #minlen = 500))
+                
+# print('. '.join([' '.join(sent) for sent in coded_cult['text'][1]]))
+
+coded_relt['text'] = coded_relt['text'].progress_apply(
+    lambda text: preprocess_text(text, 
+                                 shorten = False))
+                                 #longest = 75000, 
+                                 #shortest = 1000, 
+                                 #maxlen = 1000, 
+                                 #minlen = 500))
+coded_demog['text'] = coded_demog['text'].progress_apply(
+    lambda text: preprocess_text(text, 
+                                 shorten = False))
+                                 #longest = 75000, 
+                                 #shortest = 1000, 
+                                 #maxlen = 1000, 
+                                 #minlen = 500))
+coded_orgs['text'] = coded_orgs['text'].progress_apply(
+    lambda text: preprocess_text(text, 
+                                 shorten = False))
+                                 #longest = 75000, 
+                                 #shortest = 1000, 
+                                 #maxlen = 1000, 
+                                 #minlen = 500))
 
 tqdm.pandas(desc='Cleaning ALL text files...')
 articles['text'] = articles['text'].progress_apply(
@@ -251,6 +283,133 @@ articles['text'] = articles['text'].progress_apply(
                                  #maxlen = 1000, 
                                  #minlen = 500))
 
+
+# ###############################################
+# # Detect and parse common multi-word expressions (MWEs)
+# ###############################################
+
+# # Notes on gensim.phrases.Phrases module: 
+# # This module detects MWEs in sentences based on collocation counts. A bigram/trigram needs to occur X number of times together (a 'collocation') relative to Y number of times individually in order to be considered a common MWE.
+# # Param 'threshold' affects likelihood of forming phrases: how high X needs to be relative to Y. A higher threshold means there will be fewer phrases in the result. 
+# # The formula: A phrase of words a and b is accepted if (cnt(a, b) - min_count) * N / (cnt(a) * cnt(b)) > threshold, where N is the total vocabulary size. 
+# # The default threshold is 10.0.
+
+# def get_phrased(article, phrase_model):
+#     '''
+#     Parse phrases in article using phrase-finding model.
+    
+#     Args:
+#         article: list of lists of words (each list is a sentence)
+#     Returns:
+#         article: same format, with phrases inserted where appropriate
+#     '''
+    
+#     article = [phrase_model[sent] for sent in article] 
+        
+#     return article
+
+# print("Detecting phrases in list of sentences...")
+
+# # Add each sentence from each article to empty list, making long list of all sentences:
+# sent_list = []; articles['text'].apply(lambda article: sent_list.extend([sent for sent in article]))
+
+# phrase_finder = Phrases(sent_list, min_count=15, delimiter=b'_', common_terms=jstor_stopwords, threshold=10) 
+
+# phraser_fp = model_fp + f'phraser_{str(len(sent_list))}_sents_{str(thisday)}.pkl' # Set phraser filepath
+# phrase_finder.save(phraser_fp) # save dynamic model (can still be updated)
+# phrase_finder = phrase_finder.freeze() # Freeze model after saving; more efficient, no more updating
+
+# tqdm.pandas(desc='Parsing common phrases...')
+# coded_cult['text'] = articles['text'].progress_apply(
+#     lambda text: get_phrased(text, phrase_finder))
+# coded_relt['text'] = articles['text'].progress_apply(
+#     lambda text: get_phrased(text, phrase_finder))
+# coded_demog['text'] = articles['text'].progress_apply(
+#     lambda text: get_phrased(text, phrase_finder))
+# coded_orgs['text'] = articles['text'].progress_apply(
+#     lambda text: get_phrased(text, phrase_finder))
+
+# tqdm.pandas(desc='Parsing common phrases in ALL texts...')
+# articles['text'] = articles['text'].progress_apply(
+#     lambda text: get_phrased(text, phrase_finder))
+
+
+# ###############################################
+# # Vectorize texts and save vectorizers to disk
+# ###############################################
+
+# def collect_article_tokens(article):
+#     '''
+#     Collects words from tokenized sentences representing each article.
+    
+#     Args:
+#         article: list of lists of words (each list is a sentence)
+#     Returns:
+#         list: single list of tokens
+#     '''
+    
+#     tokens = []
+    
+#     for sent in article:
+#         tokens += [word for word in sent]
+        
+#     return tokens
+
+# # Add each word from each article to empty list, making long list of all tokens:
+# cult_tokens = []; coded_cult['text'].apply(lambda article: cult_tokens.extend([word for word in collect_article_tokens(article)]))
+# relt_tokens = []; coded_relt['text'].apply(lambda article: relt_tokens.extend([word for word in collect_article_tokens(article)]))
+# demog_tokens = []; coded_demog['text'].apply(lambda article: demog_tokens.extend([word for word in collect_article_tokens(article)]))
+# orgs_tokens = []; coded_orgs['text'].apply(lambda article: orgs_tokens.extend([word for word in collect_article_tokens(article)]))
+
+# # Use TFIDF weighted DTM because results in better classifier accuracy than unweighted
+# #vectorizer = CountVectorizer(max_features=100000, min_df=1, max_df=0.8, stop_words=jstor_stopwords) # DTM
+# vectorizer = TfidfVectorizer(max_features=100000, min_df=1, max_df=0.8, stop_words=jstor_stopwords) # TFIDF
+
+# X_cult = vectorizer.fit_transform(cult_tokens)
+# joblib.dump(vectorizer, open(cult_vec_fp, "wb")) # Save DTM
+# with open(cult_vec_feat_fp,'w') as f: # Save DTM features
+#     writer = csv.writer(f)
+#     writer.writerows([vectorizer.get_feature_names()])
+    
+# print('Number of features in cultural vectorizer:', len(vectorizer.get_feature_names()))
+
+# vectorizer = TfidfVectorizer(max_features=100000, min_df=1, max_df=0.8, stop_words=jstor_stopwords) # TFIDF
+# X_relt = vectorizer.fit_transform(relt_tokens)
+# joblib.dump(vectorizer, open(relt_vec_fp, "wb")) # Save DTM
+# with open(relt_vec_feat_fp,'w') as f: # Save features
+#     writer = csv.writer(f)
+#     writer.writerows([vectorizer.get_feature_names()])
+    
+# print('Number of features in relational vectorizer:', len(vectorizer.get_feature_names()))
+
+# vectorizer = TfidfVectorizer(max_features=100000, min_df=1, max_df=0.8, stop_words=jstor_stopwords) # TFIDF
+# X_demog = vectorizer.fit_transform(demog_tokens)
+# joblib.dump(vectorizer, open(demog_vec_fp, "wb")) # Save DTM
+# with open(demog_vec_feat_fp,'w') as f: # Save features
+#     writer = csv.writer(f)
+#     writer.writerows([vectorizer.get_feature_names()])
+
+# print('Number of features in demographic vectorizer:', len(vectorizer.get_feature_names()))
+
+# vectorizer = TfidfVectorizer(max_features=100000, min_df=1, max_df=0.8, stop_words=jstor_stopwords) # TFIDF
+# X_orgs = vectorizer.fit_transform(orgs_tokens)
+# joblib.dump(vectorizer, open(orgs_vec_fp, "wb")) # Save DTM
+# with open(orgs_vec_feat_fp,'w') as f: # Save features
+#     writer = csv.writer(f)
+#     writer.writerows([vectorizer.get_feature_names()])
+
+# print('Number of features in organizational sociology vectorizer:', len(vectorizer.get_feature_names()))
+
+
+###############################################
+# Save preprocessed text files
+###############################################
+
+# Save training data for classifiers: true positives + negatives for each perspective
+quickpickle_dump(coded_cult, training_cult_prepped_fp)
+quickpickle_dump(coded_relt, training_relt_prepped_fp)
+quickpickle_dump(coded_demog, training_demog_prepped_fp)
+quickpickle_dump(coded_orgs, training_orgs_prepped_fp)
 
 # Save full, preprocessed text data
 quickpickle_dump(articles, all_prepped_fp)
