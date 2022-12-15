@@ -2,17 +2,26 @@
 # coding: utf-8
 
 '''
-@title: Write or read text files
-@author: Jaren Haber, PhD, Georgetown University
-@contact: Jaren.Haber@georgetown.edu
+@title: Functions for working with files
+@author: Jaren Haber, PhD, Dartmouth College
+@contact: jhaber@berkeley.edu
 @repo: https://github.com/h2researchgroup/classification/
 @date created: January 6, 2018
-@date modified: December 2020
+@date modified: December 2022
 '''
 
-# Import packages & functions:
-import pandas as pd
+###############################################
+#                   Imports                   #
+###############################################
 
+import pandas as pd
+import gc # For speeding up loading pickle files ('gc' = 'garbage collector')
+import _pickle as cPickle # Optimized version of pickle
+
+
+###############################################
+#               Define functions              #
+###############################################
 
 def write_textlist(file_path, textlist):
     """Writes textlist to file_path. Useful for recording output of parse_school().
@@ -23,6 +32,34 @@ def write_textlist(file_path, textlist):
         
         for elem in textlist:
             file_handler.write("{}\n".format(elem))
+            
+
+def quickpickle_load(picklepath):
+    '''Very time-efficient way to load pickle-formatted objects into Python.
+    Uses C-based pickle (cPickle) and gc workarounds to facilitate speed. 
+    Input: Filepath to pickled (*.pkl) object.
+    Output: Python object (probably a list of sentences or something similar).'''
+
+    with open(picklepath, 'rb') as loadfile:
+        
+        gc.disable() # disable garbage collector
+        outputvar = cPickle.load(loadfile) # Load from picklepath into outputvar
+        gc.enable() # enable garbage collector again
+    
+    return outputvar
+
+
+def quickpickle_dump(dumpvar, picklepath):
+    '''Very time-efficient way to dump pickle-formatted objects from Python.
+    Uses C-based pickle (cPickle) and gc workarounds to facilitate speed. 
+    Input: Python object (probably a list of sentences or something similar).
+    Output: Filepath to pickled (*.pkl) object.'''
+
+    with open(picklepath, 'wb') as destfile:
+        
+        gc.disable() # disable garbage collector
+        cPickle.dump(dumpvar, destfile) # Dump dumpvar to picklepath
+        gc.enable() # enable garbage collector again
     
     return    
 

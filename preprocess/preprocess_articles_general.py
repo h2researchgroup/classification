@@ -9,7 +9,7 @@
 @project: Computational Literature Review of Organizational Scholarship
 @repo: https://github.com/h2researchgroup/classification/
 @date: December 7, 2020
-@description: Peprocesses JSTOR article data for general applications (e.g., word embeddings). Preprocesses filtered article data for sample selection and model training. Does not create vectorizers as embeddings don't use these. Does not retain stopwords or deal with labeled data. Saves the preprocessed data to disk. 
+@description: Preprocesses JSTOR article data for general applications (e.g., word embeddings). Preprocesses filtered article data for sample selection and model training. Does not create vectorizers as embeddings don't use these. Does not retain stopwords or deal with labeled data. Saves the preprocessed data to disk. 
 '''
 
 

@@ -22,7 +22,7 @@ import re, datetime
 import string # for one method of eliminating punctuation
 from nltk.corpus import stopwords # for eliminating stop words
 from sklearn.feature_extraction import text
-from nltk.stem.porter import PorterStemmer; ps = PorterStemmer() # approximate but effective (and common) method of stemming words
+from nltk.stem.porter import PorterStemmer; ps = PorterStemmer() # approximate but effective (and common) method of normalizing words: stems words by implementing a hierarchy of linguistic rules that transform or cut off word endings
 import os # for working with file trees
 import numpy as np
 from enchant import Dict; check_english_enchant = Dict("en_US")  # dictionary of english words for language filtering 
@@ -34,16 +34,7 @@ from java.io import StringReader
 from org.apache.lucene.analysis.ja import JapaneseAnalyzer
 from org.apache.lucene.analysis.standard import StandardAnalyzer, StandardTokenizer
 from org.apache.lucene.analysis.tokenattributes import CharTermAttribute
-'''
-# Define filepaths
-cwd = os.getcwd()
-root = str.replace(cwd, 'classification/preprocess', '')
-dict_fp = root + 'dictionary_methods/dictionaries/core/'
 
-# Load dictionary with words related to organizations
-orgs_dict = pd.read_csv(dict_fp + 'orgs.csv', delimiter = '\n', 
-                        header=None)[0]
-'''
 
 ###############################################
 #               Define functions              #
@@ -505,7 +496,6 @@ def preprocess_text(article,
                 doc.append(sent)
 
     return doc
-
 
 
 def clean_sentence_alt(sentence, 
