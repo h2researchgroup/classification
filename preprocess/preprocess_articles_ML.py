@@ -5,16 +5,16 @@
 @title: Preprocess Articles for JSTOR Classifier Training
 @author: Jaren Haber, PhD, Georgetown University
 @coauthors: Prof. Heather Haveman, UC Berkeley; Yoon Sung Hong, Wayfair
-@contact: Jaren.Haber@georgetown.edu
+@contact: jhaber@berkeley.edu
 @project: Computational Literature Review of Organizational Scholarship
 @repo: https://github.com/h2researchgroup/classification/
 @date: December 7, 2020
-@description: General script for preprocessing JSTOR article data. As of now does three things: Preprocesses article data for classifier training purposes; preprocesses ALL filtered article data for future sample selection; and creates vectorizers for training each classifier. Saves the preprocessed data (labeled and full) and vectorizers to disk. 
+@description: Preprocesses JSTOR article data for machine learning (ML) applications. Does three things: Preprocesses labeled articles for classifier training purposes; preprocesses ALL filtered article data for future sample selection; and creates vectorizers for training each classifier. Does not retain stopwords. Saves the preprocessed data (labeled and full) and vectorizers to disk. 
 '''
 
 
 ###############################################
-# Initialize
+#                  Initialize                 #
 ###############################################
 
 # import packages
@@ -39,7 +39,7 @@ import random
 import os; from os import listdir; from os.path import isfile, join
 
 # Custom scripts for working with texts in Python
-from clean_text import stopwords_make, punctstr_make, unicode_make, apache_tokenize, clean_sentence_apache # for preprocessing text
+from clean_text_utils import stopwords_make, punctstr_make, unicode_make, apache_tokenize, clean_sentence_apache, get_maxlen, preprocess_text # for preprocessing text
 from quickpickle import quickpickle_dump, quickpickle_load # for quick saving & loading to pickle format
 from text_to_file import write_textlist, read_text # custom scripts for reading and writing text lists to .txt files
 
@@ -48,7 +48,7 @@ jstor_stopwords = set(["a", "an", "and", "are", "as", "at", "be", "but", "by", "
 
 
 ###############################################
-# Define file paths
+#              Define file paths              #
 ###############################################
 
 cwd = os.getcwd()
@@ -59,6 +59,7 @@ thisday = date.today().strftime("%m%d%y")
 data_fp = root + 'classification/data/'
 model_fp = root + 'classification/models/'
 prepped_fp = root + 'models_storage/preprocessed_texts/'
+dict_fp = root + 'dictionary_methods/dictionaries/original/'
 
 # Current article lists
 article_list_fp = data_fp + 'filtered_length_index.csv' # Filtered index of research articles
@@ -90,7 +91,7 @@ training_orgs_prepped_fp = data_fp + f'training_orgs_preprocessed_{str(thisday)}
 
 
 ###############################################
-# Load data
+#                  Load data                  #
 ###############################################
 
 coded_cult = quickpickle_load(training_cult_raw_fp)
@@ -112,130 +113,8 @@ all_prepped_fp = prepped_fp + f'filtered_preprocessed_texts_{str(len(articles))}
 
 
 ###############################################
-# Preprocess text files
+#           Preprocess text files             #
 ###############################################
-
-def get_maxlen(length, 
-               longest, 
-               shortest, 
-               maxlength, 
-               minlength):
-    '''
-    Compute how many words to return for an article. Will be at least minlength and at most maxlength. 
-    Gradate between these based on how long article is relative to longest article in corpus.
-    
-    Longest article will have (length/discounter) = gap between min and max lengths. 
-    Shortest will have (length/discounter) = 0.
-    
-    Formula: maxlength = minlength + (length/discounter)
-    
-    Args:
-        length (int): number of words in preprocessed article text
-        longest (int): longest article in corpus (in # words)
-        shortest (int): shortest article in corpus (in # words)
-        maxlength (int): maximum number of words to return per article
-        minlength (int): minimum number of words to return per article
-        
-    Returns:
-        maxlength (int): how many words to return for this article
-    '''
-    
-    gap = maxlength - minlength # gap between minimum and maximum article lengths = the most we can add to minlength
-    
-    discounter = (longest-shortest)/gap # how many of these gaps do we have to cover to reach # words in longest article? That's the discounter. Discount by shortest article length to restrict range to between 0 and gap
-    
-    maxlength = minlength + ((length-shortest)/discounter) # apply the discounter to decide how many "gap-steps" to add for this article. 
-    # Apply gap # gap-steps to reach original maxlength.
-    
-    return int(maxlength)
-    
-
-def preprocess_text(article, 
-                    shorten = False, 
-                    longest = 999999, 
-                    shortest = 0, 
-                    maxlen = 999999, 
-                    minlen = 0):
-    '''
-    Cleans up articles by removing page marker junk, 
-    unicode formatting, and extra whitespaces; 
-    re-joining words split by (hyphenated at) end of line; 
-    removing numbers (by default) and acronyms (not by default); 
-    tokenizing sentences into words using the Apache Lucene Tokenizer (same as JSTOR); 
-    lower-casing words; 
-    removing stopwords (same as JSTOR), junk formatting words, junk sentence fragments, 
-    and proper nouns (the last not by default).
-    
-    Args:
-        article (str): lots of sentences with punctuation etc, often long
-        shorten (boolean): if True, shorten sentences to at most maxlen words
-        longest (int): number of words in longest article in corpus (get this elsewhere)
-        shortest (int): number of words in shortest article in corpus (depends on filtering)
-        maxlen (int): maximum number of words to return per article; default is huge number, set lower if shorten == True
-        minlen (int): minimum number of words to return per article
-        
-    Returns:
-        list of lists of str: each element of list is a sentence, each sentence is a list of words
-    '''
-            
-    # Remove page marker junk
-    article = article.replace('<plain_text><page sequence="1">', '')
-    article = re.sub(r'</page>(\<.*?\>)', ' \n ', article)
-    
-    # Compute maximum length for this article: from minlen to maxlen, gradated depending on longest
-    if shorten:
-        article_length = len(article.split()) # tokenize (split by spaces) then count # words in article
-        
-        if article_length > minlen: # if article is longer than minimum length to extract, decide how much to extract
-            maxlen = get_maxlen(article_length, 
-                                longest, 
-                                shortest, 
-                                maxlen, 
-                                minlen)
-        elif article_length <= minlen: # if article isn't longer than minimum length to extract, just take whole thing
-            shorten = False # don't shorten
-    
-    doc = [] # list to hold tokenized sentences making up article
-    numwords = 0 # initialize word counter
-    
-    if shorten:
-        while numwords < maxlen: # continue adding words until reaching maxlen
-            for sent in article.split('\n'):
-                #sent = clean_sent(sent)
-                sent = [word for word in clean_sentence_apache(sent, 
-                                                               unhyphenate=True, 
-                                                               remove_numbers=True, 
-                                                               remove_acronyms=False, 
-                                                               remove_stopwords=True, 
-                                                               remove_propernouns=False, 
-                                                               return_string=False) if word != ''] # remove empty strings
-
-                if numwords < maxlen and len(sent) > 0:
-                    gap = int(maxlen - numwords)
-                    if len(sent) > gap: # if sentence is bigger than gap between current numwords and max # words, shorten it
-                        sent = sent[:gap] 
-                    doc.append(sent)
-                    numwords += len(sent)
-
-                if len(sent) > 0:
-                    doc.append(sent)
-                    numwords += len(sent)
-    
-    else: # take whole sentence (don't shorten)
-        for sent in article.split('\n'):
-            #sent = clean_sent(sent)
-            sent = [word for word in clean_sentence_apache(sent, 
-                                                           unhyphenate=True, 
-                                                           remove_numbers=True, 
-                                                           remove_acronyms=False, 
-                                                           remove_stopwords=True, 
-                                                           remove_propernouns=False, 
-                                                           return_string=False) if word != ''] # remove empty strings
-            
-            if len(sent) > 0:
-                doc.append(sent)
-
-    return doc
 
 tqdm.pandas(desc='Cleaning labeled text files...')
 coded_cult['text'] = coded_cult['text'].progress_apply(
@@ -276,10 +155,29 @@ articles['text'] = articles['text'].progress_apply(
                                  #maxlen = 1000, 
                                  #minlen = 500))
 
+                
+#########################################################################
+# Detect & fix multi-word expressions (MWEs) from original dictionaries #
+#########################################################################
 
-###############################################
-# Detect and parse common multi-word expressions (MWEs)
-###############################################
+# Load original dictionaries
+cult_orig = pd.read_csv(dict_fp + 'cultural_original.csv', header=None)[0].apply(lambda x: x.replace(',', ' '))
+dem_orig = pd.read_csv(dict_fp + 'demographic_original.csv', header=None)[0].apply(lambda x: x.replace(',', ' '))
+relt_orig = pd.read_csv(dict_fp + 'relational_original.csv', header=None)[0].apply(lambda x: x.replace(',', ' '))
+
+# Filter dicts to MWEs/bigrams & trigrams
+orig_dicts = (pd.concat((cult_orig, dem_orig, relt_orig))).tolist() # full list of dictionaries
+orig_bigrams = set([term for term in orig_dicts if len(term) > 1]) # filter to MWEs
+
+# Detect & fix MWEs
+tqdm.pandas(desc='Fixing dict MWEs...')
+articles['text'] = articles['text'].progress_apply(
+    lambda text: fix_ngrams(text))
+
+
+#########################################################
+# Detect and parse common multi-word expressions (MWEs) #
+#########################################################
 
 # Notes on gensim.phrases.Phrases module: 
 # This module detects MWEs in sentences based on collocation counts. A bigram/trigram needs to occur X number of times together (a 'collocation') relative to Y number of times individually in order to be considered a common MWE.
@@ -327,9 +225,9 @@ articles['text'] = articles['text'].progress_apply(
     lambda text: get_phrased(text, phrase_finder))
 
 
-###############################################
-# Vectorize texts and save vectorizers to disk
-###############################################
+################################################
+# Vectorize texts and save vectorizers to disk #
+################################################
 
 def collect_article_tokens(article):
     '''
@@ -395,7 +293,7 @@ print('Number of features in organizational sociology vectorizer:', len(vectoriz
 
 
 ###############################################
-# Save preprocessed text files
+#        Save preprocessed text files         #
 ###############################################
 
 # Save training data for classifiers: true positives + negatives for each perspective
