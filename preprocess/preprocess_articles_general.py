@@ -41,8 +41,7 @@ import os; from os import listdir; from os.path import isfile, join
 
 # Custom scripts for working with texts in Python
 from clean_text_utils import stopwords_jstor, remove_http, punctstr_make, unicode_make, apache_tokenize, clean_sentence_apache, get_maxlen, fix_ngrams, preprocess_text # for preprocessing text
-from quickpickle import quickpickle_dump, quickpickle_load # for quick saving & loading to pickle format
-from text_to_file import write_textlist, read_text # custom scripts for reading and writing text lists to .txt files
+from file_utils import quickpickle_dump, quickpickle_load, write_textlist, read_text # for quick saving & loading to pickle format, reading & writing text lists to .txt files
 
 # Set up for multiprocessing with pandas
 #from pandarallel import pandarallel # use via `df.parallel_apply`
@@ -60,7 +59,6 @@ thisday = date.today().strftime("%m%d%y")
 
 # paths to metadata, dictionaries, similar objects
 data_fp = root + 'classification/data/'
-model_fp = root + 'classification/models/'
 prepped_fp = root + 'models_storage/preprocessed_texts/' # directory for prepared data: save files here
 dict_fp = root + 'dictionary_methods/dictionaries/'
 meta_fp = root + 'dictionary_methods/code/metadata_combined.h5' # current metadata (dates are wrong)
@@ -78,19 +76,19 @@ article_paths_fp = data_fp + 'filtered_length_article_paths.csv' # List of artic
 orgs_dict = pd.read_csv(dict_fp + 'core/orgs.csv', delimiter = '\n', 
                         header=None)[0].tolist()
 
+print("Loading & merging datasets...")
+
 # Read full list of articles for new sample selection
-tqdm.pandas(desc='Correcting file paths')
+#tqdm.pandas(desc='Correcting file paths')
 #print('Correcting file paths...')
 articles = (pd.read_csv(article_paths_fp, low_memory=False, header=None, names=['file_name']))
-articles['file_name'] = articles['file_name'].progress_apply(lambda fp: re.sub('/home/jovyan/work/', root, fp))
+articles['file_name'] = articles['file_name'].apply(lambda fp: re.sub('/home/jovyan/work/', root, fp)) # correct filepaths
 articles['edited_filename'] = articles['file_name'].apply(lambda fname: fname.split('-')[-1][:-4])
 
 # Read text data from files
 tqdm.pandas(desc='Loading ALL text files')
 #print('Loading text files...')
 articles['text'] = articles['file_name'].progress_apply(lambda fp: read_text(fp, shell = True))
-
-print("Merging datasets...")
 
 # # combine the data for the correct article dates
 dates1 = pd.read_csv(prepped_fp + 'parts-1-3-metadata.csv')
@@ -108,10 +106,10 @@ df_meta['id'] = df_meta.jstor_url.apply(lambda url: remove_http(url, https = Tru
 # join corrected dates with rest of metadata
 # use col 'publicationYear', NOT col 'year'
 df_meta = df_meta.merge(dates_df, on = 'id') 
-df = articles.merge(df_meta, on = 'edited_filename', how = 'left', validate='1:1')
-df['doi'] = df['edited_filename']
-df = df[['text', 'jstor_url', 'publicationYear', 'article_name', 'doi', 'primary_subject', 'journal_title', 'abstract', 'creator', 'file_name', 'wordCount', 'pageCount']]
-df = df[~df['publicationYear'].isna()] # must have year data to keep
+articles = articles.merge(df_meta, on = 'edited_filename', how = 'left', validate='1:1')
+articles['doi'] = articles['edited_filename']
+articles = articles[['text', 'jstor_url', 'publicationYear', 'article_name', 'doi', 'primary_subject', 'journal_title', 'abstract', 'creator', 'file_name', 'wordCount', 'pageCount']]
+articles = articles[~articles['publicationYear'].isna()] # must have year data to keep
 
 
 ###############################################
@@ -131,9 +129,25 @@ filter_orgs = True
 orgs_text = '_orgdict'
 
 if filter_orgs:
-    tqdm.pandas(desc='Filtering for orgs')
     #print('Filtering for orgs...')
-    articles = articles[articles['text'].progress_apply(lambda text: any(term in text for term in orgs_dict))] # (' '.join([token for list in sentlist for token in list]))
+    # Separate by discipline
+    soc_articles = articles[articles.primary_subject == 'Sociology']
+    mgt_articles = articles[articles.primary_subject == 'Management & Organizational Behavior']
+    soc_before_len = len(soc_articles)
+    mgt_before_len = len(mgt_articles)
+    
+    tqdm.pandas(desc='Filtering soc for orgs')
+    soc_articles = soc_articles[soc_articles['text'].progress_apply(lambda text: any(term in text for term in orgs_dict))] # (' '.join([token for list in sentlist for token in list]))
+    tqdm.pandas(desc='Filtering mgt for orgs')
+    mgt_articles = mgt_articles[mgt_articles['text'].progress_apply(lambda text: any(term in text for term in orgs_dict))]
+    
+    soc_num_removed = int(soc_before_len - len(soc_articles))
+    mgt_num_removed = int(mgt_before_len - len(mgt_articles))
+    print(f"Removed {soc_num_removed+mgt_num_removed} articles total for missing any word related to orgs.")
+    print(f"Breakdown: {soc_num_removed} removed from soc out of {soc_before_len}; {mgt_num_removed} removed from mgt/OB out of {mgt_before_len}.")
+    
+    # Merge disciplines back together
+    articles = pd.concat([soc_articles, mgt_articles])
 
 
 ################################################
@@ -146,7 +160,7 @@ if filter_orgs:
 #                       verbose = 1)
 
 tqdm.pandas(desc='Cleaning text files')
-#print(' Cleaning ALL text files...')
+#print(' Cleaning text files...')
 articles['text'] = articles['text'].progress_apply(
     lambda text: preprocess_text(text, 
                                  filter_english = filter_english,
@@ -155,7 +169,7 @@ articles['text'] = articles['text'].progress_apply(
                                  #shortest = 1000, 
                                  #maxlen = 1000, 
                                  #minlen = 500))
-                
+          
                 
 #########################################################################
 # Detect & fix multi-word expressions (MWEs) from original dictionaries #
@@ -171,7 +185,7 @@ relt_orig = pd.read_csv(dict_fp + 'original/relational_original.csv', delimiter 
 
 # Filter dicts to MWEs/bigrams & trigrams
 orig_dicts = (pd.concat((cult_orig, dem_orig, relt_orig))).tolist() # full list of dictionaries
-orig_ngrams = set([term for term in orig_dicts if len(term) > 1]) # filter to MWEs
+orig_ngrams = set([term for term in orig_dicts if len(term.split()) > 1]) # filter to MWEs
 
 # Detect & fix MWEs
 tqdm.pandas(desc='Fixing dict MWEs')
@@ -207,10 +221,9 @@ def get_phrased(article, phrase_model):
 # Add each sentence from each article to empty list, making long list of all sentences:
 sent_list = []; articles['text'].apply(lambda article: sent_list.extend([sent for sent in article]))
 
-jstor_stopwords = stopwords_jstor(junk = False) # get stopwords for JSTOR (no junk formatting words)
-phrase_finder = Phrases(sent_list, min_count=15, delimiter=b'_', common_terms=jstor_stopwords, threshold=10) 
-
-phraser_fp = model_fp + f'phraser_{str(len(sent_list))}_sents_{str(thisday)}.pkl' # Set phraser filepath
+# Construct phraser
+phrase_finder = Phrases(sent_list, min_count=5, delimiter='_', threshold=10) 
+phraser_fp = prepped_fp + f'phraser_{str(len(sent_list))}_sents_{str(thisday)}.pkl' # Set phraser filepath
 phrase_finder.save(phraser_fp) # save dynamic model (can still be updated)
 phrase_finder = phrase_finder.freeze() # Freeze model after saving; more efficient, no more updating
 
@@ -224,7 +237,7 @@ articles['text'] = articles['text'].progress_apply(
 #            Split data by decade             #
 ###############################################
 
-first_decade = articles[articles['publicationYear'] >= 1971 & (articles['publicationYear'] <= 1981) ] # 1970s
+first_decade = articles[(articles['publicationYear'] >= 1971) & (articles['publicationYear'] <= 1981) ] # 1970s
 second_decade = articles[(articles['publicationYear'] >= 1982) & (articles['publicationYear'] <= 1992) ] # 1980s
 third_decade = articles[(articles['publicationYear'] >= 1993) & (articles['publicationYear'] <= 2003) ] # 1990s
 fourth_decade = articles[(articles['publicationYear'] >= 2004) & (articles['publicationYear'] <= 2014) ] # 2000s

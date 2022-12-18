@@ -21,18 +21,7 @@ import _pickle as cPickle # Optimized version of pickle
 
 ###############################################
 #               Define functions              #
-###############################################
-
-def write_textlist(file_path, textlist):
-    """Writes textlist to file_path. Useful for recording output of parse_school().
-    Input: Path to file, list of strings
-    Output: Nothing (saved to disk)"""
-    
-    with open(file_path, 'w') as file_handler:
-        
-        for elem in textlist:
-            file_handler.write("{}\n".format(elem))
-            
+###############################################         
 
 def quickpickle_load(picklepath):
     '''Very time-efficient way to load pickle-formatted objects into Python.
@@ -63,6 +52,17 @@ def quickpickle_dump(dumpvar, picklepath):
     
     return    
 
+
+def write_textlist(file_path, textlist):
+    """Writes textlist to file_path. Useful for recording output of parse_school().
+    Input: Path to file, list of strings
+    Output: Nothing (saved to disk)"""
+    
+    with open(file_path, 'w') as file_handler:
+        
+        for elem in textlist:
+            file_handler.write("{}\n".format(elem))
+            
 
 def read_text(file_path, return_string = True, shell = False):
     """Loads text into memory, either as str or as list. Must be assigned to object.

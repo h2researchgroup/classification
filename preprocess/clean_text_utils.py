@@ -430,18 +430,6 @@ def preprocess_text(article,
     article = re.sub(r'<.*?>', '', article)
     article = re.sub(r'<body.*\n\s*.*\s*.*>', '', article)
     
-    # Filter to English words, if set to do so
-    if filter_english:
-        '''
-        article_filtered = []
-        print(article)
-        for sent in article:
-            sent = [word for word in sent if check_english_enchant.check(word)]
-            article_filtered.append(sent)
-        article = article_filtered
-        '''
-        article = ' '.join([word for sent in article.split('\n') for word in sent if check_english_enchant.check(word)])
-    
     # Compute maximum length for this article: from minlen to maxlen, gradated depending on longest
     if shorten:
         article_length = len(article.split()) # tokenize (split by spaces) then count # words in article
@@ -462,13 +450,23 @@ def preprocess_text(article,
         while numwords < maxlen: # continue adding words until reaching maxlen
             for sent in article.split('\n'):
                 #sent = clean_sent(sent)
-                sent = [word for word in clean_sentence_apache(sent, 
-                                                               unhyphenate=True, 
-                                                               remove_numbers=True, 
-                                                               remove_acronyms=False, 
-                                                               remove_stopwords=True, 
-                                                               remove_propernouns=False, 
-                                                               return_string=False) if word != ''] # remove empty strings
+                if filter_english: # Filter to English words, if set to do so
+                    sent = [word for word in clean_sentence_apache(sent, 
+                                                                   unhyphenate=True, 
+                                                                   remove_numbers=True, 
+                                                                   remove_acronyms=False, 
+                                                                   remove_stopwords=True, 
+                                                                   remove_propernouns=False, 
+                                                                   return_string=False) if 
+                            word != '' and check_english_enchant.check(word)] # remove empty strings and check for english
+                else: # no english filter
+                    sent = [word for word in clean_sentence_apache(sent, 
+                                                                   unhyphenate=True, 
+                                                                   remove_numbers=True, 
+                                                                   remove_acronyms=False, 
+                                                                   remove_stopwords=True, 
+                                                                   remove_propernouns=False, 
+                                                                   return_string=False) if word != ''] # remove empty strings
 
                 if numwords < maxlen and len(sent) > 0:
                     gap = int(maxlen - numwords)
@@ -484,13 +482,23 @@ def preprocess_text(article,
     else: # take whole sentence (don't shorten)
         for sent in article.split('\n'):
             #sent = clean_sent(sent)
-            sent = [word for word in clean_sentence_apache(sent, 
-                                                           unhyphenate=True, 
-                                                           remove_numbers=True, 
-                                                           remove_acronyms=False, 
-                                                           remove_stopwords=True, 
-                                                           remove_propernouns=False, 
-                                                           return_string=False) if word != ''] # remove empty strings
+            if filter_english:
+                    sent = [word for word in clean_sentence_apache(sent, 
+                                                                   unhyphenate=True, 
+                                                                   remove_numbers=True, 
+                                                                   remove_acronyms=False, 
+                                                                   remove_stopwords=True, 
+                                                                   remove_propernouns=False, 
+                                                                   return_string=False) if 
+                            word != '' and check_english_enchant.check(word)] # remove empty strings and check for english
+            else: # no english filter
+                sent = [word for word in clean_sentence_apache(sent, 
+                                                               unhyphenate=True, 
+                                                               remove_numbers=True, 
+                                                               remove_acronyms=False, 
+                                                               remove_stopwords=True, 
+                                                               remove_propernouns=False, 
+                                                               return_string=False) if word != ''] # remove empty strings
             
             if len(sent) > 0:
                 doc.append(sent)
