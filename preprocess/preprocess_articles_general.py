@@ -84,10 +84,10 @@ print("Loading & merging datasets...")
 articles = (pd.read_csv(article_paths_fp, low_memory=False, header=None, names=['file_name']))
 articles['file_name'] = articles['file_name'].apply(lambda fp: re.sub('/home/jovyan/work/', root, fp)) # correct filepaths
 articles['edited_filename'] = articles['file_name'].apply(lambda fname: fname.split('-')[-1][:-4])
+print(str(len(articles)), "articles in data as of initial loading")
 
 # Read text data from files
 tqdm.pandas(desc='Loading ALL text files')
-#print('Loading text files...')
 articles['text'] = articles['file_name'].progress_apply(lambda fp: read_text(fp, shell = True))
 
 # # combine the data for the correct article dates
@@ -95,21 +95,31 @@ dates1 = pd.read_csv(prepped_fp + 'parts-1-3-metadata.csv')
 dates1['id'] = dates1.id.apply(lambda url: remove_http(url))
 dates2 = pd.read_csv(prepped_fp + 'part-4-metadata.csv')
 dates2['id'] = dates2.id.apply(lambda url: remove_http(url))
-dates_df = pd.concat([dates1, dates2]) 
+dates_df = pd.concat([dates1, dates2])
+#print(str(len(dates_df)), "articles in corrected dates metadata")
 
 # load and prepare full metadata
 df_meta = pd.read_hdf(meta_fp).reset_index(drop=False) # extract file name from index
 df_meta['edited_filename'] = df_meta['file_name'].apply(lambda fname: fname.split('-')[-1]) # get DOI from file name, e.g. 'journal-article-10.2307_2065002' -> '10.2307_2065002'
-df_meta = df_meta[['edited_filename', 'article_name', 'jstor_url', 'abstract', 'journal_title', 'primary_subject', 'year', 'type']] # keep only relevant columns
+df_meta = df_meta[['edited_filename', 'article_name', 'jstor_url', 'abstract', 'journal_title', 'primary_subject', 'year', 'type']].rename(columns = {'year':'year_raw'}) # keep only relevant columns
 df_meta['id'] = df_meta.jstor_url.apply(lambda url: remove_http(url, https = True))
+print(str(len(df_meta)), "articles in combined metadata from dict counting pipeline")
 
-# join corrected dates with rest of metadata
-# use col 'publicationYear', NOT col 'year'
-df_meta = df_meta.merge(dates_df, on = 'id') 
+# join corrected dates ('publicationYear') with rest of metadata ('year')
+df_meta = df_meta.merge(dates_df, on = 'id', how = 'left')
+
+# if no 'publicationYear', use 'year' as imperfect backup (2327 cases of this)
+df_meta['correctedYear'] = df_meta['publicationYear'] # unchanged, correct version of publicationYear (as backup)
+df_meta['publicationYear'] = df_meta['publicationYear'].fillna(df_meta['year_raw'])
+
+# merge metadata with text data
 articles = articles.merge(df_meta, on = 'edited_filename', how = 'left', validate='1:1')
 articles['doi'] = articles['edited_filename']
-articles = articles[['text', 'jstor_url', 'publicationYear', 'article_name', 'doi', 'primary_subject', 'journal_title', 'abstract', 'creator', 'file_name', 'wordCount', 'pageCount']]
+articles = articles[['text', 'jstor_url', 'publicationYear', 'correctedYear', 'year_raw', 'article_name', 'doi', 'primary_subject', 'journal_title', 'abstract', 'creator', 'file_name', 'wordCount', 'pageCount']]
+#removed = articles.loc[articles['publicationYear'].isna()].drop(columns=['text', 'abstract']).copy()
+
 articles = articles[~articles['publicationYear'].isna()] # must have year data to keep
+print(str(len(articles)), "articles in data after merging and removing empty years")
 
 
 ###############################################
@@ -120,16 +130,16 @@ enchant_text = ''; orgs_text = '' # defaults to using neither filter
 
 # To filter to English words with enchant, 
 # make sure next line is set to 'True' and uncomment line after that one
-filter_english = True
-enchant_text = '_enchant'
+filter_english = False
+#enchant_text = '_enchant'
 
 # To filter to articles with at least one word related to organizations, 
 # make sure next line is set to 'True' and uncomment line after that one
 filter_orgs = True
-orgs_text = '_orgdict'
+#orgs_text = '_orgdict'
 
 if filter_orgs:
-    #print('Filtering for orgs...')
+    print('Filtering for orgs...')
     # Separate by discipline
     soc_articles = articles[articles.primary_subject == 'Sociology']
     mgt_articles = articles[articles.primary_subject == 'Management & Organizational Behavior']
@@ -148,6 +158,7 @@ if filter_orgs:
     
     # Merge disciplines back together
     articles = pd.concat([soc_articles, mgt_articles])
+    print(str(len(articles)), "articles in data after org words filter")
 
 
 ################################################
@@ -169,6 +180,7 @@ articles['text'] = articles['text'].progress_apply(
                                  #shortest = 1000, 
                                  #maxlen = 1000, 
                                  #minlen = 500))
+print(str(len(articles)), "articles in data after text cleaning")
           
                 
 #########################################################################
@@ -192,6 +204,8 @@ tqdm.pandas(desc='Fixing dict MWEs')
 #print('Fixing dict MWEs...')
 articles['text'] = articles['text'].progress_apply(
     lambda text: fix_ngrams(text, ngrams_list = orig_ngrams))
+
+print(str(len(articles)), "articles in data after fixing ngrams in place (from custom theoretical dicts)")
 
 
 #########################################################
@@ -224,13 +238,15 @@ sent_list = []; articles['text'].apply(lambda article: sent_list.extend([sent fo
 # Construct phraser
 phrase_finder = Phrases(sent_list, min_count=5, delimiter='_', threshold=10) 
 phraser_fp = prepped_fp + f'phraser_{str(len(sent_list))}_sents_{str(thisday)}.pkl' # Set phraser filepath
-phrase_finder.save(phraser_fp) # save dynamic model (can still be updated)
-phrase_finder = phrase_finder.freeze() # Freeze model after saving; more efficient, no more updating
+#phrase_finder.save(phraser_fp) # save dynamic model (can still be updated)
+#phrase_finder = phrase_finder.freeze() # Freeze model after saving; more efficient, no more updating
 
 tqdm.pandas(desc='Parsing common phrases in texts')
 #print(' Parsing common phrases in texts...')
 articles['text'] = articles['text'].progress_apply(
     lambda text: get_phrased(text, phrase_finder))
+
+print(str(len(articles)), "articles in data after parsing common MWEs")
 
 
 ###############################################
@@ -255,12 +271,13 @@ decade3_fp = prepped_fp + f'filtered{enchant_text}{orgs_text}_preprocessed_texts
 decade4_fp = prepped_fp + f'filtered{enchant_text}{orgs_text}_preprocessed_texts_2004-2014_{str(len(fourth_decade))}_{str(thisday)}.pkl' # 2000s
 
 # Save full, preprocessed text data
-quickpickle_dump(articles, all_prepped_fp) # all texts
-quickpickle_dump(first_decade, decade1_fp) # 1970s
-quickpickle_dump(second_decade, decade2_fp) # 1980s
-quickpickle_dump(third_decade, decade3_fp) # 1990s
-quickpickle_dump(fourth_decade, decade4_fp) # 2000s
+#quickpickle_dump(articles, all_prepped_fp) # all texts
+#quickpickle_dump(first_decade, decade1_fp) # 1970s
+#quickpickle_dump(second_decade, decade2_fp) # 1980s
+#quickpickle_dump(third_decade, decade3_fp) # 1990s
+#quickpickle_dump(fourth_decade, decade4_fp) # 2000s
 
-print("Saved preprocessed text to file.")
+print("Done!")
+#print("Saved preprocessed text to file.")
 
 sys.exit() # Close script to be safe
