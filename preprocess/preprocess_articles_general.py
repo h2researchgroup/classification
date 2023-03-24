@@ -43,11 +43,6 @@ import os; from os import listdir; from os.path import isfile, join
 from clean_text_utils import stopwords_jstor, remove_http, punctstr_make, unicode_make, apache_tokenize, clean_sentence_apache, get_maxlen, fix_ngrams, preprocess_text # for preprocessing text
 from file_utils import quickpickle_dump, quickpickle_load, write_textlist, read_text # for quick saving & loading to pickle format, reading & writing text lists to .txt files
 
-# Set up for multiprocessing with pandas
-#from pandarallel import pandarallel # use via `df.parallel_apply`
-#from multiprocessing import cpu_count; cores = cpu_count() # count cores
-#pandarallel.initialize(nb_workers = cores-4, verbose = 0) # work quietly
-
 
 ###############################################
 #              Define file paths              #
@@ -79,7 +74,6 @@ orgs_dict = pd.read_csv(dict_fp + 'core/orgs.csv', delimiter = '\n',
 print("Loading & merging datasets...")
 
 # Read full list of articles for new sample selection
-#tqdm.pandas(desc='Correcting file paths')
 #print('Correcting file paths...')
 articles = (pd.read_csv(article_paths_fp, low_memory=False, header=None, names=['file_name']))
 articles['file_name'] = articles['file_name'].apply(lambda fp: re.sub('/home/jovyan/work/', root, fp)) # correct filepaths
@@ -92,10 +86,9 @@ articles['text'] = articles['file_name'].progress_apply(lambda fp: read_text(fp,
 
 # # combine the data for the correct article dates
 dates1 = pd.read_csv(prepped_fp + 'parts-1-3-metadata.csv')
-dates1['id'] = dates1.id.apply(lambda url: remove_http(url))
 dates2 = pd.read_csv(prepped_fp + 'part-4-metadata.csv')
-dates2['id'] = dates2.id.apply(lambda url: remove_http(url))
 dates_df = pd.concat([dates1, dates2])
+dates_df['id'] = dates_df.id.apply(lambda url: remove_http(url))
 #print(str(len(dates_df)), "articles in corrected dates metadata")
 
 # load and prepare full metadata
@@ -108,15 +101,18 @@ print(str(len(df_meta)), "articles in combined metadata from dict counting pipel
 # join corrected dates ('publicationYear') with rest of metadata ('year')
 df_meta = df_meta.merge(dates_df, on = 'id', how = 'left')
 
-# if no 'publicationYear', use 'year' as imperfect backup (2327 cases of this)
+# if no 'publicationYear', use 'year_raw' as imperfect backup (2327 cases of this)
 df_meta['correctedYear'] = df_meta['publicationYear'] # unchanged, correct version of publicationYear (as backup)
-df_meta['publicationYear'] = df_meta['publicationYear'].fillna(df_meta['year_raw'])
+df_meta['publicationYear'] = df_meta['publicationYear'].fillna(df_meta['year_raw'].str.replace(r'\D+', '', regex = True)) # fill in empties with 'year_raw', removing chars on the latter on the way
 
 # merge metadata with text data
 articles = articles.merge(df_meta, on = 'edited_filename', how = 'left', validate='1:1')
 articles['doi'] = articles['edited_filename']
 articles = articles[['text', 'jstor_url', 'publicationYear', 'correctedYear', 'year_raw', 'article_name', 'doi', 'primary_subject', 'journal_title', 'abstract', 'creator', 'file_name', 'wordCount', 'pageCount']]
-#removed = articles.loc[articles['publicationYear'].isna()].drop(columns=['text', 'abstract']).copy()
+
+# get list of articles removed for missing pubyear
+removed = articles.loc[articles['publicationYear'].isna()].drop(columns=['text', 'abstract']).copy() 
+removed.to_csv(f'removed_articles_nopubyear_{thisday}')
 
 articles = articles[~articles['publicationYear'].isna()] # must have year data to keep
 print(str(len(articles)), "articles in data after merging and removing empty years")
@@ -136,7 +132,7 @@ filter_english = False
 # To filter to articles with at least one word related to organizations, 
 # make sure next line is set to 'True' and uncomment line after that one
 filter_orgs = True
-#orgs_text = '_orgdict'
+orgs_text = '_orgdict'
 
 if filter_orgs:
     print('Filtering for orgs...')
@@ -147,7 +143,7 @@ if filter_orgs:
     mgt_before_len = len(mgt_articles)
     
     tqdm.pandas(desc='Filtering soc for orgs')
-    soc_articles = soc_articles[soc_articles['text'].progress_apply(lambda text: any(term in text for term in orgs_dict))] # (' '.join([token for list in sentlist for token in list]))
+    soc_articles = soc_articles[soc_articles['text'].progress_apply(lambda text: any(term in text for term in orgs_dict))]
     tqdm.pandas(desc='Filtering mgt for orgs')
     mgt_articles = mgt_articles[mgt_articles['text'].progress_apply(lambda text: any(term in text for term in orgs_dict))]
     
@@ -165,17 +161,12 @@ if filter_orgs:
 #     Clean stopwords, etc. from text files    #
 ################################################
 
-# Use progress bars with parallelized pandas
-#pandarallel.initialize(progress_bar=True, 
-#                       nb_workers = cores-4, 
-#                       verbose = 1)
-
 tqdm.pandas(desc='Cleaning text files')
-#print(' Cleaning text files...')
 articles['text'] = articles['text'].progress_apply(
     lambda text: preprocess_text(text, 
                                  filter_english = filter_english,
                                  shorten = False))
+                                 #Optional params:
                                  #longest = 75000, 
                                  #shortest = 1000, 
                                  #maxlen = 1000, 
@@ -201,7 +192,6 @@ orig_ngrams = set([term for term in orig_dicts if len(term.split()) > 1]) # filt
 
 # Detect & fix MWEs
 tqdm.pandas(desc='Fixing dict MWEs')
-#print('Fixing dict MWEs...')
 articles['text'] = articles['text'].progress_apply(
     lambda text: fix_ngrams(text, ngrams_list = orig_ngrams))
 
@@ -238,11 +228,10 @@ sent_list = []; articles['text'].apply(lambda article: sent_list.extend([sent fo
 # Construct phraser
 phrase_finder = Phrases(sent_list, min_count=5, delimiter='_', threshold=10) 
 phraser_fp = prepped_fp + f'phraser_{str(len(sent_list))}_sents_{str(thisday)}.pkl' # Set phraser filepath
-#phrase_finder.save(phraser_fp) # save dynamic model (can still be updated)
-#phrase_finder = phrase_finder.freeze() # Freeze model after saving; more efficient, no more updating
+phrase_finder.save(phraser_fp) # save dynamic model (can still be updated)
+phrase_finder = phrase_finder.freeze() # Freeze model after saving; more efficient, no more updating
 
 tqdm.pandas(desc='Parsing common phrases in texts')
-#print(' Parsing common phrases in texts...')
 articles['text'] = articles['text'].progress_apply(
     lambda text: get_phrased(text, phrase_finder))
 
@@ -253,10 +242,10 @@ print(str(len(articles)), "articles in data after parsing common MWEs")
 #            Split data by decade             #
 ###############################################
 
-first_decade = articles[(articles['publicationYear'] >= 1971) & (articles['publicationYear'] <= 1981) ] # 1970s
-second_decade = articles[(articles['publicationYear'] >= 1982) & (articles['publicationYear'] <= 1992) ] # 1980s
-third_decade = articles[(articles['publicationYear'] >= 1993) & (articles['publicationYear'] <= 2003) ] # 1990s
-fourth_decade = articles[(articles['publicationYear'] >= 2004) & (articles['publicationYear'] <= 2014) ] # 2000s
+first_decade = articles[(articles['publicationYear'].astype(int) >= 1971) & (articles['publicationYear'].astype(int) <= 1981) ] # 1970s
+second_decade = articles[(articles['publicationYear'].astype(int) >= 1982) & (articles['publicationYear'].astype(int) <= 1992) ] # 1980s
+third_decade = articles[(articles['publicationYear'].astype(int) >= 1993) & (articles['publicationYear'].astype(int) <= 2003) ] # 1990s
+fourth_decade = articles[(articles['publicationYear'].astype(int) >= 2004) & (articles['publicationYear'].astype(int) <= 2014) ] # 2000s
 
 
 ###############################################
@@ -271,13 +260,12 @@ decade3_fp = prepped_fp + f'filtered{enchant_text}{orgs_text}_preprocessed_texts
 decade4_fp = prepped_fp + f'filtered{enchant_text}{orgs_text}_preprocessed_texts_2004-2014_{str(len(fourth_decade))}_{str(thisday)}.pkl' # 2000s
 
 # Save full, preprocessed text data
-#quickpickle_dump(articles, all_prepped_fp) # all texts
-#quickpickle_dump(first_decade, decade1_fp) # 1970s
-#quickpickle_dump(second_decade, decade2_fp) # 1980s
-#quickpickle_dump(third_decade, decade3_fp) # 1990s
-#quickpickle_dump(fourth_decade, decade4_fp) # 2000s
+quickpickle_dump(articles, all_prepped_fp) # all texts
+quickpickle_dump(first_decade, decade1_fp) # 1970s
+quickpickle_dump(second_decade, decade2_fp) # 1980s
+quickpickle_dump(third_decade, decade3_fp) # 1990s
+quickpickle_dump(fourth_decade, decade4_fp) # 2000s
 
-print("Done!")
-#print("Saved preprocessed text to file.")
+print("Saved preprocessed text to file.")
 
 sys.exit() # Close script to be safe
